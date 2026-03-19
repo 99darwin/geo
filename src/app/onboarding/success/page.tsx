@@ -5,12 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
-const POLL_INTERVAL_MS = 2000;
-const MAX_POLL_DURATION_MS = 60000;
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLL_DURATION_MS = 300000; // 5 minutes — pipeline can take a while
 
 export default function OnboardingSuccessPage() {
   const router = useRouter();
   const [timedOut, setTimedOut] = useState(false);
+  const [status, setStatus] = useState<string>('waiting');
 
   useEffect(() => {
     const start = Date.now();
@@ -23,9 +24,18 @@ export default function OnboardingSuccessPage() {
         const res = await fetch('/api/dashboard');
         if (res.ok) {
           const data = await res.json();
-          if (data.data?.client) {
+          const onboardingStatus = data.data?.client?.onboardingStatus;
+
+          if (onboardingStatus === 'setup_complete' || onboardingStatus === 'active') {
             router.push('/dashboard');
             return;
+          }
+
+          // Update display status for user feedback
+          if (onboardingStatus === 'setup_running') {
+            setStatus('running');
+          } else if (onboardingStatus === 'setup_pending') {
+            setStatus('pending');
           }
         }
       } catch {
@@ -49,6 +59,10 @@ export default function OnboardingSuccessPage() {
     };
   }, [router]);
 
+  const statusMessage = status === 'running'
+    ? "We're analyzing your website and checking AI visibility across platforms. This usually takes a few minutes."
+    : "We're processing your payment and setting up AI monitoring.";
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
       <div className="w-full max-w-sm text-center">
@@ -59,21 +73,26 @@ export default function OnboardingSuccessPage() {
         {timedOut ? (
           <div className="mt-8">
             <h1 className="text-xl font-bold text-gray-900">
-              Processing Your Payment
+              Still Working
             </h1>
             <p className="mt-3 text-sm text-gray-600">
-              Your payment is being processed. This can take a moment.
-              Your dashboard will be ready shortly.
+              Setup is taking longer than usual. Your dashboard will be ready soon.
+              You can check back or go to the dashboard now.
             </p>
-            <Button
-              className="mt-6"
-              onClick={() => {
-                setTimedOut(false);
-                window.location.reload();
-              }}
-            >
-              Check Again
-            </Button>
+            <div className="mt-6 flex gap-3 justify-center">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setTimedOut(false);
+                  window.location.reload();
+                }}
+              >
+                Check Again
+              </Button>
+              <Button onClick={() => router.push('/dashboard')}>
+                Go to Dashboard
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="mt-8">
@@ -82,8 +101,7 @@ export default function OnboardingSuccessPage() {
               Setting Up Your Account
             </h1>
             <p className="mt-3 text-sm text-gray-600">
-              We&apos;re analyzing your website and setting up AI monitoring.
-              This usually takes a minute or two.
+              {statusMessage}
             </p>
           </div>
         )}

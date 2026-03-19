@@ -89,6 +89,7 @@ enum DirectoryPlatform {
 enum OnboardingStatus {
   scan_complete
   setup_pending
+  setup_running
   setup_complete
   active
 }

@@ -14,15 +14,43 @@ const ALL_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity", "gemini"];
 /**
  * Full setup pipeline — runs after checkout.session.completed.
  * Crawls the site, generates files, checks citations, computes score.
+ *
+ * Idempotent: uses atomic claim on onboardingStatus to prevent concurrent runs,
+ * and cleans up existing records before re-creating them on retries.
  */
 export async function runSetupPipeline(clientId: string): Promise<void> {
   console.log("[Setup Pipeline] Starting for client:", clientId);
 
-  // Step 1: Load client
-  const client = await prisma.client.findUnique({ where: { id: clientId } });
-  if (!client) {
-    throw new Error(`Client not found: ${clientId}`);
+  // Atomic claim: only one process can transition setup_pending → setup_running.
+  // If another process already claimed it, bail out.
+  const claimed = await prisma.client.updateMany({
+    where: { id: clientId, onboardingStatus: "setup_pending" },
+    data: { onboardingStatus: "setup_running" },
+  });
+
+  if (claimed.count === 0) {
+    console.log("[Setup Pipeline] Already claimed or completed for client:", clientId);
+    return;
   }
+
+  try {
+    await executeSetupSteps(clientId);
+  } catch (error) {
+    // On failure, revert to setup_pending so retries can re-claim
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { onboardingStatus: "setup_pending" },
+    });
+    throw error;
+  }
+}
+
+async function executeSetupSteps(clientId: string): Promise<void> {
+  // Step 1: Load client
+  const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+
+  // Clean up any partial data from a previous interrupted run
+  await cleanupPreviousRun(clientId);
 
   // Step 2: Crawl site
   console.log("[Setup Pipeline] Crawling:", client.websiteUrl);
@@ -43,7 +71,6 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
     },
   });
 
-  // Reload client with updated data
   const updatedClient = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
 
   // Step 4: Generate llms.txt
@@ -175,7 +202,7 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
 
       allCitationPositions.push({ position: result.position ?? null });
 
-      // Step 9: Extract sources from this response
+      // Extract sources from this response
       if (result.rawResponse) {
         const sources = extractSources(result.rawResponse, platform);
         for (const source of sources) {
@@ -226,7 +253,7 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
   // Steps 10-13: NAP audit, review snapshot, competitor detection — skipped for MVP
   console.log("[Setup Pipeline] Skipping NAP audit, reviews, competitors (MVP)");
 
-  // Step 14: Compute visibility score
+  // Step 14: Compute visibility score (upsert to handle retries)
   console.log("[Setup Pipeline] Computing visibility score");
   const scoreResult = calculateVisibilityScore({
     citedQueries: citedQueryCount,
@@ -239,13 +266,20 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
     hasCleanRobotsTxt: robotsAudit.blocked.length === 0,
   });
 
-  await prisma.visibilityScore.create({
-    data: {
+  await prisma.visibilityScore.upsert({
+    where: { clientId_period: { clientId, period } },
+    create: {
       clientId,
       score: scoreResult.total,
       queryCoverage: Math.round(scoreResult.queryCoverage * 100),
       platformCoverage: Math.round(scoreResult.platformCoverage * 100),
       period,
+      breakdown: JSON.parse(JSON.stringify(scoreResult)),
+    },
+    update: {
+      score: scoreResult.total,
+      queryCoverage: Math.round(scoreResult.queryCoverage * 100),
+      platformCoverage: Math.round(scoreResult.platformCoverage * 100),
       breakdown: JSON.parse(JSON.stringify(scoreResult)),
     },
   });
@@ -257,4 +291,21 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
   });
 
   console.log("[Setup Pipeline] Complete for client:", clientId);
+}
+
+/**
+ * Remove data from a previous interrupted pipeline run so we start clean.
+ */
+async function cleanupPreviousRun(clientId: string): Promise<void> {
+  const existingQueries = await prisma.query.count({ where: { clientId } });
+  if (existingQueries === 0) return;
+
+  console.log("[Setup Pipeline] Cleaning up previous run for client:", clientId);
+
+  // Delete in dependency order: citations reference queries
+  await prisma.citation.deleteMany({ where: { clientId } });
+  await prisma.query.deleteMany({ where: { clientId } });
+  await prisma.generatedFile.deleteMany({ where: { clientId } });
+  await prisma.industrySource.deleteMany({ where: { clientId } });
+  await prisma.visibilityScore.deleteMany({ where: { clientId } });
 }

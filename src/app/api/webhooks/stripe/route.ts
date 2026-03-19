@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
-import { runSetupPipeline } from "@/lib/pipelines/setup";
 
 function extractStripeId(value: string | { id: string } | null): string | null {
   if (!value) return null;
@@ -16,6 +15,28 @@ function extractDomainName(url: string): string {
   } catch {
     return url;
   }
+}
+
+/**
+ * Dispatch the setup pipeline to the internal endpoint.
+ * Fire-and-forget — returns immediately so the webhook responds within Stripe's timeout.
+ */
+function dispatchSetupPipeline(clientId: string) {
+  const setupSecret = process.env.SETUP_PIPELINE_SECRET;
+  if (!setupSecret) {
+    console.error("[Stripe Webhook] SETUP_PIPELINE_SECRET not set, cannot dispatch pipeline");
+    return;
+  }
+  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  fetch(`${baseUrl}/api/setup/${clientId}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${setupSecret}`,
+    },
+  }).catch((err) => {
+    console.error("[Stripe Webhook] Failed to dispatch setup pipeline:", err instanceof Error ? err.message : err);
+  });
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
@@ -42,17 +63,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  // Idempotent upsert: use stripeCustomerId unique constraint
-  // If client already exists for this Stripe customer, skip creation
+  // Idempotent: skip if client already exists for this Stripe customer
   const existing = await prisma.client.findUnique({
     where: { stripeCustomerId: customerId },
   });
+
   if (existing) {
     console.log("[Stripe Webhook] Client already exists for customer:", customerId);
-    // If setup was interrupted, re-trigger it
+    // If setup was interrupted, re-dispatch it (atomic claim happens inside the pipeline)
     if (existing.onboardingStatus === "setup_pending") {
-      console.log("[Stripe Webhook] Re-triggering setup for client:", existing.id);
-      await runSetupPipeline(existing.id);
+      dispatchSetupPipeline(existing.id);
     }
     return;
   }
@@ -72,9 +92,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   console.log("[Stripe Webhook] Client created:", client.id);
 
-  // Run setup pipeline directly (in-process)
-  // If this fails, the outer catch will return 500 so Stripe retries
-  await runSetupPipeline(client.id);
+  // Dispatch setup pipeline asynchronously — don't await
+  dispatchSetupPipeline(client.id);
 }
 
 async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
@@ -195,7 +214,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     console.error("[Stripe Webhook] Handler error:", event.type, message);
-    // Return 500 so Stripe retries critical events
     return NextResponse.json(
       { error: "Webhook handler failed" },
       { status: 500 }

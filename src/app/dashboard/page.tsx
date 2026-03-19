@@ -99,7 +99,7 @@ export default function DashboardPage() {
 
   const { client } = data;
 
-  if (client.onboardingStatus === 'setup_pending') {
+  if (client.onboardingStatus === 'setup_pending' || client.onboardingStatus === 'setup_running') {
     return <SetupPendingState businessName={client.businessName} />;
   }
 
