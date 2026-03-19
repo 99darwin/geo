@@ -5,11 +5,16 @@ import { runFreeScan } from "@/lib/pipelines/free-scan";
 import type { ApiResponse, ScanResult } from "@/types";
 
 const scanSchema = z.object({
-  url: z.url("Must be a valid URL"),
+  url: z.string().transform((val) => {
+    const trimmed = val.trim();
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }).pipe(z.url("Must be a valid URL")),
 });
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const checkRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 5 });
+
+export const maxDuration = 60;
 
 export async function POST(
   request: NextRequest
@@ -55,8 +60,7 @@ export async function POST(
     );
   } catch (error) {
     const isTimeout =
-      error instanceof Error &&
-      (error.name === "AbortError" || error.message.includes("abort"));
+      error instanceof Error && error.name === "AbortError";
 
     if (isTimeout) {
       return NextResponse.json(
@@ -65,10 +69,14 @@ export async function POST(
       );
     }
 
-    console.error("[POST /api/scan] Pipeline error:", error);
-    return NextResponse.json(
-      { error: "An unexpected error occurred during the scan." },
-      { status: 500 }
-    );
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[POST /api/scan] Pipeline error:", errorMessage);
+
+    const userMessage = errorMessage.includes("is not configured")
+      ? "Service configuration error. Please contact support."
+      : `Scan failed: ${errorMessage}`;
+
+    return NextResponse.json({ error: userMessage }, { status: 500 });
   }
 }
