@@ -24,8 +24,10 @@ export async function GET(
   const auth = await requireAuth();
   if (auth.error) return auth.error;
 
+  const VALID_PLATFORMS = ["chatgpt", "perplexity", "google_ai", "gemini"];
   const { searchParams } = new URL(request.url);
-  const platform = searchParams.get("platform");
+  const platformParam = searchParams.get("platform");
+  const platform = platformParam && VALID_PLATFORMS.includes(platformParam) ? platformParam : null;
   const cursor = searchParams.get("cursor");
   const limit = Math.min(Number(searchParams.get("limit")) || 20, 50);
 

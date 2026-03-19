@@ -2,6 +2,8 @@ import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
 import { rateLimit } from "./lib/rate-limit";
 
+// NOTE: In-memory rate limiter — best-effort only in serverless environments.
+// TODO: Replace with distributed rate limiter (Upstash Redis) for production.
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const loginRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 10 });
 

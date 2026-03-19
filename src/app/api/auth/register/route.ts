@@ -11,6 +11,8 @@ const registerSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
+// NOTE: In-memory rate limiter — best-effort only in serverless environments.
+// TODO: Replace with distributed rate limiter (Upstash Redis) for production.
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const checkRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 10 });
 

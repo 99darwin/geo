@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+/**
+ * Public endpoint — intentionally unauthenticated.
+ * Serves JSON-LD schema scripts that businesses embed on their websites.
+ * Client IDs are UUIDs (not enumerable). Content is structured business data
+ * that is already public on the client's own website.
+ */
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }
