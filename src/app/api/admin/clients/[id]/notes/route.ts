@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import type { ApiResponse } from "@/types";
 
 const noteSchema = z.object({
-  content: z.string().min(1, "Note content is required"),
+  content: z.string().min(1, "Note content is required").max(5000, "Note must be 5000 characters or fewer"),
 });
 
 export async function POST(

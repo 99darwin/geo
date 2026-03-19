@@ -1,9 +1,30 @@
 import { getToken } from "next-auth/jwt";
 import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "./lib/rate-limit";
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const loginRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 10 });
 
 export async function middleware(request: NextRequest) {
-  const token = await getToken({ req: request });
   const { pathname } = request.nextUrl;
+
+  // Rate limit login attempts by IP (not by email, to prevent targeted lockout DoS)
+  if (pathname === "/api/auth/callback/credentials" && request.method === "POST") {
+    const ip =
+      request.headers.get("x-real-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      "anonymous";
+    const { success } = loginRateLimit(`login:${ip}`);
+    if (!success) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Try again later." },
+        { status: 429, headers: { "Retry-After": "3600" } }
+      );
+    }
+    return NextResponse.next();
+  }
+
+  const token = await getToken({ req: request });
   const isApiRoute = pathname.startsWith("/api/");
 
   if (!token) {
@@ -34,5 +55,6 @@ export const config = {
     "/api/dashboard/:path*",
     "/admin/:path*",
     "/api/admin/:path*",
+    "/api/auth/callback/credentials",
   ],
 };

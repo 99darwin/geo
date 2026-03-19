@@ -3,10 +3,6 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
-import { rateLimit } from "./rate-limit";
-
-const ONE_HOUR_MS = 60 * 60 * 1000;
-const loginRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 10 });
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
@@ -25,9 +21,8 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        // Rate limit login attempts by email
-        const { success } = loginRateLimit(credentials.email);
-        if (!success) return null;
+        // Rate limiting is handled in middleware by IP (not here by email,
+        // which would enable targeted account lockout DoS)
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
