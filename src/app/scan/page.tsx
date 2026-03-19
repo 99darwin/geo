@@ -67,7 +67,7 @@ function ScanPageContent() {
             Get monthly reports, AI-optimized files, competitor tracking, and
             more.
           </p>
-          <Link href="/login" className="mt-6 inline-block">
+          <Link href={`/onboarding${url ? `?url=${encodeURIComponent(url)}` : ''}`} className="mt-6 inline-block">
             <Button
               variant="secondary"
               size="lg"
