@@ -300,3 +300,13 @@ model AdminNote {
 
   @@index([clientId])
 }
+
+model SharedReport {
+  id        String   @id @default(uuid())
+  token     String   @unique @default(uuid())
+  data      Json
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}

@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import type { ScanResult } from '@/types';
 import { ScanResults } from '@/components/scan-results';
+import { ShareButton } from '@/components/share-button';
 import { Button } from '@/components/ui/button';
 
 function ScanPageContent() {
@@ -59,6 +60,10 @@ function ScanPageContent() {
             Results for {url}
           </p>
         )}
+
+        <div className="mb-6 flex justify-end">
+          <ShareButton result={result} />
+        </div>
 
         <ScanResults result={result} />
 
