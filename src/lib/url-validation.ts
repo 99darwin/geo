@@ -12,6 +12,9 @@ const BLOCKED_HOSTNAME_PATTERNS = [
   /^169\.254\./,
   /^0\./,
   /^\[?::1\]?$/,
+  /^\[?::ffff:(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.)/i,
+  /^\[?fe[89ab][0-9a-f]:/i,   // fe80::/10 link-local
+  /^\[?f[cd][0-9a-f]{2}:/i,   // fc00::/7 unique-local
   /^metadata\.google\.internal$/i,
   /^metadata\.internal$/i,
 ];

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -11,6 +12,7 @@ interface DashboardScanFormProps {
 }
 
 export function DashboardScanForm({ onScanComplete }: DashboardScanFormProps) {
+  const router = useRouter();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -54,9 +56,13 @@ export function DashboardScanForm({ onScanComplete }: DashboardScanFormProps) {
         return;
       }
 
-      // Store result for the scan results page, then refresh dashboard
+      // Store result and navigate to detailed results view
       sessionStorage.setItem('scanResult', JSON.stringify(data.data));
+      if (data.persisted !== undefined) {
+        sessionStorage.setItem('scanPersisted', String(data.persisted));
+      }
       onScanComplete();
+      router.push(`/scan?url=${encodeURIComponent(normalizedUrl)}`);
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {

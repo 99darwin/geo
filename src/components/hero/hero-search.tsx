@@ -58,6 +58,9 @@ export function HeroSearch({ onUrlChange }: HeroSearchProps) {
 
       if (response.ok) {
         sessionStorage.setItem('scanResult', JSON.stringify(data.data));
+        if (data.persisted !== undefined) {
+          sessionStorage.setItem('scanPersisted', String(data.persisted));
+        }
         router.push(`/scan?url=${encodeURIComponent(trimmed)}`);
         return;
       }

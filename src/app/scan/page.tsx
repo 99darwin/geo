@@ -13,6 +13,7 @@ function ScanPageContent() {
   const { data: session } = useSession();
   const url = searchParams.get('url');
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [persisted, setPersisted] = useState(false);
   const [hasChecked, setHasChecked] = useState(false);
 
   useEffect(() => {
@@ -24,6 +25,7 @@ function ScanPageContent() {
         // Corrupted data — ignore
       }
     }
+    setPersisted(sessionStorage.getItem('scanPersisted') === 'true');
     setHasChecked(true);
   }, []);
 
@@ -66,7 +68,7 @@ function ScanPageContent() {
             {session ? 'View Your Dashboard' : 'Want Continuous AI Monitoring?'}
           </h2>
           <p className="mt-2 text-indigo-100">
-            {session
+            {session && persisted
               ? 'Your scan results have been saved. Check your full visibility report.'
               : 'Get monthly reports, AI-optimized files, competitor tracking, and more.'}
           </p>
