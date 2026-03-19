@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import type { ApiResponse } from "@/types";
+import { generateRecommendations } from "@/lib/engines/recommendations";
+import { auditRobotsTxt } from "@/lib/engines/robots-auditor";
+import type { ApiResponse, Recommendation } from "@/types";
 
 interface DashboardData {
   client: {
@@ -34,6 +36,14 @@ interface DashboardData {
     llmsTxt: boolean;
     schemaJson: boolean;
   };
+  scoreHistory: { period: string; score: number }[];
+  recommendations: Recommendation[];
+  competitors: {
+    name: string;
+    domain: string | null;
+    citedCount: number;
+    platforms: string[];
+  }[];
 }
 
 export async function GET(
@@ -58,29 +68,99 @@ export async function GET(
       );
     }
 
-    // Fetch latest visibility score
-    const latestScore = await prisma.visibilityScore.findFirst({
-      where: { clientId: client.id },
-      orderBy: { period: "desc" },
-    });
-
-    // Fetch recent citations with query text
-    const recentCitations = await prisma.citation.findMany({
-      where: { clientId: client.id },
-      orderBy: { checkedAt: "desc" },
-      take: 20,
-      include: {
-        query: { select: { queryText: true } },
-      },
-    });
-
-    // Check generated files status
-    const activeFiles = await prisma.generatedFile.findMany({
-      where: { clientId: client.id, isActive: true },
-      select: { fileType: true },
-    });
+    // Parallel queries for dashboard data
+    const [
+      latestScore,
+      recentCitations,
+      activeFiles,
+      scoreHistory,
+      competitors,
+      napResults,
+      reviewSnapshots,
+    ] = await Promise.all([
+      prisma.visibilityScore.findFirst({
+        where: { clientId: client.id },
+        orderBy: { period: "desc" },
+      }),
+      prisma.citation.findMany({
+        where: { clientId: client.id },
+        orderBy: { checkedAt: "desc" },
+        take: 20,
+        include: { query: { select: { queryText: true } } },
+      }),
+      prisma.generatedFile.findMany({
+        where: { clientId: client.id, isActive: true },
+        select: { fileType: true },
+      }),
+      prisma.visibilityScore.findMany({
+        where: { clientId: client.id },
+        orderBy: { period: "asc" },
+        take: 12,
+        select: { period: true, score: true },
+      }),
+      prisma.competitor.findMany({
+        where: { clientId: client.id },
+        take: 5,
+        include: {
+          competitorCitations: {
+            where: { cited: true },
+            select: { platform: true },
+          },
+        },
+      }),
+      prisma.napAudit.findMany({
+        where: { clientId: client.id },
+        orderBy: { checkedAt: "desc" },
+        distinct: ["platform"],
+      }),
+      prisma.reviewSnapshot.findMany({
+        where: { clientId: client.id },
+        orderBy: { checkedAt: "desc" },
+        distinct: ["platform"],
+      }),
+    ]);
 
     const fileTypes = new Set(activeFiles.map((f: { fileType: string }) => f.fileType));
+
+    // Compute citation stats for recommendations
+    const citedQueries = new Set(
+      recentCitations.filter((c) => c.cited).map((c) => c.query.queryText)
+    );
+    const totalQueries = new Set(recentCitations.map((c) => c.query.queryText));
+    const platformsCiting = [
+      ...new Set(recentCitations.filter((c) => c.cited).map((c) => c.platform)),
+    ];
+
+    // Get robots.txt audit (cached via short timeout, non-blocking)
+    let robotsAudit: { accessible: boolean; blocked: string[]; total: number; status: string } = { accessible: true, blocked: [], total: 5, status: "clean" };
+    try {
+      robotsAudit = await auditRobotsTxt(client.websiteUrl);
+    } catch {
+      // Non-critical — use defaults
+    }
+
+    const recommendations = generateRecommendations({
+      robotsAudit,
+      hasLlmsTxt: fileTypes.has("llms_txt"),
+      hasSchema: fileTypes.has("schema_json"),
+      citedQueryCount: citedQueries.size,
+      totalQueryCount: totalQueries.size,
+      platformsCiting,
+      totalPlatforms: 3,
+      napResults: napResults.map((n) => ({
+        platform: n.platform,
+        nameMatch: n.nameMatch,
+        addressMatch: n.addressMatch,
+        phoneMatch: n.phoneMatch,
+        listingUrl: n.listingUrl ?? undefined,
+        issues: n.issues,
+      })),
+      reviewSnapshots: reviewSnapshots.map((r) => ({
+        platform: r.platform,
+        rating: r.rating,
+        reviewCount: r.reviewCount,
+      })),
+    });
 
     const data: DashboardData = {
       client: {
@@ -123,6 +203,17 @@ export async function GET(
         llmsTxt: fileTypes.has("llms_txt"),
         schemaJson: fileTypes.has("schema_json"),
       },
+      scoreHistory: scoreHistory.map((s) => ({
+        period: s.period.toISOString(),
+        score: s.score,
+      })),
+      recommendations,
+      competitors: competitors.map((c) => ({
+        name: c.competitorName,
+        domain: c.competitorUrl,
+        citedCount: c.competitorCitations.length,
+        platforms: [...new Set(c.competitorCitations.map((cc) => cc.platform))],
+      })),
     };
 
     return NextResponse.json({ data });

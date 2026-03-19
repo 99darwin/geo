@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/db";
 import type { ApiResponse } from "@/types";
 
-export async function POST(
+function verifyCronSecret(authHeader: string | null, secret: string): boolean {
+  const expected = `Bearer ${secret}`;
+  if (!authHeader || authHeader.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+}
+
+async function handleCleanup(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<{ deleted: number }>>> {
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
-    console.error("[POST /api/cron/cleanup-reports] CRON_SECRET not configured");
+    console.error("[cron/cleanup-reports] CRON_SECRET not configured");
     return NextResponse.json(
       { error: "Server misconfiguration" },
       { status: 500 }
@@ -15,7 +22,7 @@ export async function POST(
   }
 
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${cronSecret}`) {
+  if (!verifyCronSecret(authHeader, cronSecret)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -26,10 +33,13 @@ export async function POST(
 
     return NextResponse.json({ data: { deleted: result.count } });
   } catch (error) {
-    console.error("[POST /api/cron/cleanup-reports]", error);
+    console.error("[cron/cleanup-reports]", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
     );
   }
 }
+
+export const GET = handleCleanup;
+export const POST = handleCleanup;

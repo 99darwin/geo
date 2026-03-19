@@ -7,6 +7,10 @@ import { calculateVisibilityScore } from "@/lib/engines/scoring";
 import { auditRobotsTxt } from "@/lib/engines/robots-auditor";
 import { generateLlmsTxt } from "@/lib/engines/generators/llms-txt";
 import { generateSchemaScript } from "@/lib/engines/generators/schema-jsonld";
+import { checkNap } from "@/lib/engines/nap-checker";
+import { pullReviews } from "@/lib/engines/review-puller";
+import { detectCompetitors } from "@/lib/engines/competitor-detector";
+import { isBlockedUrl } from "@/lib/url-validation";
 import type { AiPlatform } from "@/types/platforms";
 
 const ALL_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity", "gemini"];
@@ -78,6 +82,11 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
 async function executeSetupSteps(clientId: string): Promise<void> {
   // Step 1: Load client
   const client = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
+
+  // SSRF validation — block private/internal URLs
+  if (isBlockedUrl(client.websiteUrl)) {
+    throw new Error(`Blocked URL: ${client.websiteUrl}`);
+  }
 
   // Clean up any partial data from a previous interrupted run
   await cleanupPreviousRun(clientId);
@@ -280,8 +289,75 @@ async function executeSetupSteps(clientId: string): Promise<void> {
     )
   );
 
-  // Steps 10-13: NAP audit, review snapshot, competitor detection — skipped for MVP
-  console.log("[Setup Pipeline] Skipping NAP audit, reviews, competitors (MVP)");
+  // Steps 10-12: NAP audit, review snapshot, competitor detection
+  console.log("[Setup Pipeline] Running NAP audit, reviews, competitor detection");
+
+  const [napResult, reviewResult] = await Promise.allSettled([
+    checkNap({
+      businessName: updatedClient.businessName,
+      address: updatedClient.address ?? undefined,
+      phone: updatedClient.phone ?? undefined,
+      city: updatedClient.city,
+      state: updatedClient.state ?? undefined,
+    }),
+    pullReviews({
+      businessName: updatedClient.businessName,
+      city: updatedClient.city,
+      state: updatedClient.state ?? undefined,
+    }),
+  ]);
+
+  if (napResult.status === "fulfilled" && napResult.value.length > 0) {
+    await prisma.napAudit.createMany({
+      data: napResult.value.map((r) => ({
+        clientId,
+        platform: r.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
+        nameMatch: r.nameMatch,
+        addressMatch: r.addressMatch,
+        phoneMatch: r.phoneMatch,
+        listingUrl: r.listingUrl ?? null,
+        issues: r.issues,
+      })),
+    });
+  }
+
+  if (reviewResult.status === "fulfilled" && reviewResult.value.length > 0) {
+    await prisma.reviewSnapshot.createMany({
+      data: reviewResult.value.map((r) => ({
+        clientId,
+        platform: r.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
+        rating: r.rating,
+        reviewCount: r.reviewCount,
+      })),
+    });
+  }
+
+  // Competitor detection from citation responses
+  const citationResponsesForDetection = Array.from(citationResults).flatMap(
+    ([queryText, platformMap]) =>
+      Array.from(platformMap).map(([platform, result]) => ({
+        query: queryText,
+        platform,
+        rawResponse: result.rawResponse,
+        sourcesCited: result.sourcesCited,
+      }))
+  );
+
+  const detectedCompetitors = detectCompetitors({
+    businessName: updatedClient.businessName,
+    citationResponses: citationResponsesForDetection,
+  });
+
+  for (const comp of detectedCompetitors.slice(0, 5)) {
+    await prisma.competitor.create({
+      data: {
+        clientId,
+        competitorName: comp.name,
+        competitorUrl: comp.domain ? `https://${comp.domain}` : null,
+        isAutoDetected: true,
+      },
+    });
+  }
 
   // Step 14: Compute visibility score (upsert to handle retries)
   console.log("[Setup Pipeline] Computing visibility score");
@@ -336,7 +412,13 @@ async function cleanupPreviousRun(clientId: string): Promise<void> {
 
   console.log("[Setup Pipeline] Cleaning up previous run for client:", clientId);
 
-  // Delete in dependency order: citations reference queries
+  // Delete in dependency order: competitor citations reference competitors and queries
+  await prisma.competitorCitation.deleteMany({
+    where: { competitor: { clientId } },
+  });
+  await prisma.competitor.deleteMany({ where: { clientId } });
+  await prisma.napAudit.deleteMany({ where: { clientId } });
+  await prisma.reviewSnapshot.deleteMany({ where: { clientId } });
   await prisma.citation.deleteMany({ where: { clientId } });
   await prisma.query.deleteMany({ where: { clientId } });
   await prisma.generatedFile.deleteMany({ where: { clientId } });

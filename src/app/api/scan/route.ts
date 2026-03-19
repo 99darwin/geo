@@ -40,7 +40,7 @@ export async function POST(
     request.headers.get("x-real-ip") ??
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
     "anonymous";
-  const { success, remaining } = checkRateLimit(ip);
+  const { success, remaining } = await checkRateLimit(ip);
 
   if (!success) {
     return NextResponse.json(

@@ -14,7 +14,7 @@ export async function middleware(request: NextRequest) {
       request.headers.get("x-real-ip") ??
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       "anonymous";
-    const { success } = loginRateLimit(`login:${ip}`);
+    const { success } = await loginRateLimit(`login:${ip}`);
     if (!success) {
       return NextResponse.json(
         { error: "Too many login attempts. Try again later." },

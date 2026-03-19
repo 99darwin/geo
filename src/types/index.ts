@@ -77,3 +77,53 @@ export interface ApiResponse<T> {
   data?: T;
   error?: string;
 }
+
+// --- NAP / Directory Engine Types ---
+
+export interface NapCheckResult {
+  platform: string;
+  nameMatch: boolean | null;
+  addressMatch: boolean | null;
+  phoneMatch: boolean | null;
+  listingUrl?: string;
+  issues: string[];
+}
+
+export interface ReviewPullResult {
+  platform: string;
+  rating: number | null;
+  reviewCount: number | null;
+  url?: string;
+}
+
+// --- Competitor Detection Types ---
+
+export interface DetectedCompetitor {
+  name: string;
+  domain?: string;
+  citedInQueries: string[];
+  platforms: string[];
+}
+
+// --- Recommendation Types ---
+
+export type RecommendationSeverity = "critical" | "important" | "suggestion";
+
+export interface Recommendation {
+  id: string;
+  severity: RecommendationSeverity;
+  title: string;
+  description: string;
+  actionUrl?: string;
+}
+
+// --- Monthly Check Types ---
+
+export interface MonthlyCheckResult {
+  clientId: string;
+  newScore: number;
+  previousScore: number | null;
+  delta: number;
+  filesRegenerated: boolean;
+  citationsChecked: number;
+}
