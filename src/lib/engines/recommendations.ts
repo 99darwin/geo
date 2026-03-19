@@ -30,7 +30,7 @@ export function generateRecommendations(
 
   // --- CRITICAL ---
 
-  if (!params.robotsAudit.accessible && params.robotsAudit.blocked.length > 0) {
+  if (params.robotsAudit.blocked.length > 0) {
     const blockedList = params.robotsAudit.blocked.join(", ");
     recommendations.push({
       id: "robots-blocking",

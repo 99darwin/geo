@@ -103,7 +103,7 @@ export async function runMonthlyReport(clientId: string): Promise<void> {
 
   // 6. Check generated files status
   const generatedFiles = await prisma.generatedFile.findMany({
-    where: { clientId },
+    where: { clientId, isActive: true },
     select: { fileType: true },
   });
   const fileTypes = new Set(generatedFiles.map((f) => f.fileType));

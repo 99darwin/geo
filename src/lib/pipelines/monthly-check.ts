@@ -429,23 +429,32 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
       })
     : [];
 
-  // Determine newly cited and lost queries
-  const previousCitedQueries = new Set(
-    previousCitations.filter((c) => c.cited).map((c) => c.query.queryText)
+  // Determine newly cited and lost (query, platform) pairs
+  const previousCitedPairs = new Set(
+    previousCitations
+      .filter((c) => c.cited)
+      .map((c) => `${c.query.queryText}:::${c.platform}`)
   );
 
-  const currentCitedQueries = new Set<string>();
+  const currentCitedPairs = new Map<string, { query: string; platform: string }>();
   for (const [queryText, platformMap] of citationResults) {
-    for (const [, result] of platformMap) {
+    for (const [platform, result] of platformMap) {
       if (result.cited) {
-        currentCitedQueries.add(queryText);
-        break;
+        currentCitedPairs.set(`${queryText}:::${platform}`, { query: queryText, platform });
       }
     }
   }
 
-  const newlyCited = [...currentCitedQueries].filter((q) => !previousCitedQueries.has(q));
-  const lostCitations = [...previousCitedQueries].filter((q) => !currentCitedQueries.has(q));
+  const newlyCited = [...currentCitedPairs.entries()]
+    .filter(([key]) => !previousCitedPairs.has(key))
+    .map(([, val]) => val);
+
+  const lostCitations = [...previousCitedPairs]
+    .filter((key) => !currentCitedPairs.has(key))
+    .map((key) => {
+      const [query, platform] = key.split(":::");
+      return { query, platform };
+    });
 
   const delta = scoreResult.total - (previousPeriodScore?.score ?? scoreResult.total);
 
