@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { DashboardScanForm } from '@/components/dashboard-scan-form';
 
@@ -91,7 +93,7 @@ export default function DashboardPage() {
     );
   }
 
-  // No client yet — onboarding state
+  // No client yet — show scan form for new users
   if (!data) {
     return (
       <div className="mx-auto max-w-4xl">
@@ -112,6 +114,75 @@ export default function DashboardPage() {
     );
   }
 
+  const { client } = data;
+
+  if (client.onboardingStatus === 'setup_pending' || client.onboardingStatus === 'setup_running') {
+    return <SetupPendingState businessName={client.businessName} />;
+  }
+
+  if (client.plan === 'free_scan') {
+    return <FreeScanState websiteUrl={client.websiteUrl} />;
+  }
+
+  return <ActiveDashboard data={data} />;
+}
+
+function SetupPendingState({ businessName }: { businessName: string }) {
+  return (
+    <div className="mx-auto max-w-4xl">
+      <h1 className="text-2xl font-bold text-gray-900">Setting Up Your Account</h1>
+      <p className="mt-1 text-gray-500">{businessName}</p>
+
+      <Card className="mt-8">
+        <div className="text-center py-12">
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
+          <h2 className="mt-6 text-lg font-semibold text-gray-900">
+            Analyzing your website
+          </h2>
+          <p className="mt-2 text-gray-500 max-w-md mx-auto">
+            We&apos;re crawling your site, generating AI-optimized files, and
+            checking your visibility across AI platforms. This usually takes a few minutes.
+          </p>
+          <Button
+            variant="secondary"
+            className="mt-6"
+            onClick={() => window.location.reload()}
+          >
+            Refresh
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function FreeScanState({ websiteUrl }: { websiteUrl?: string }) {
+  return (
+    <div className="mx-auto max-w-4xl">
+      <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+      <p className="mt-1 text-gray-500">Upgrade to unlock full AI visibility monitoring.</p>
+
+      <Card className="mt-8">
+        <div className="text-center py-12">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Unlock Continuous AI Monitoring
+          </h2>
+          <p className="mt-2 text-gray-500 max-w-md mx-auto">
+            Get monthly citation tracking, AI-optimized files, competitor analysis,
+            and visibility reports.
+          </p>
+          <Link href={`/onboarding${websiteUrl ? `?url=${encodeURIComponent(websiteUrl)}` : ''}`}>
+            <Button className="mt-6" size="lg">
+              Get Started — $299 + $49/mo
+            </Button>
+          </Link>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ActiveDashboard({ data }: { data: DashboardData }) {
   const { client, visibilityScore, recentCitations, generatedFiles } = data;
   const citedPlatforms = new Set(
     recentCitations.filter((c) => c.cited).map((c) => c.platform)
@@ -126,6 +197,7 @@ export default function DashboardPage() {
             {client.city}{client.state ? `, ${client.state}` : ''} — {client.websiteUrl}
           </p>
         </div>
+        <ManageBillingButton />
       </div>
 
       <Card className="mt-6">
@@ -268,6 +340,38 @@ export default function DashboardPage() {
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function ManageBillingButton() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleClick() {
+    setIsLoading(true);
+    setError('');
+    try {
+      const res = await fetch('/api/billing/portal', { method: 'POST' });
+      const json = await res.json();
+      if (json.data?.url) {
+        window.location.href = json.data.url;
+      } else {
+        setError('Failed to open billing portal. Please try again.');
+      }
+    } catch {
+      setError('Failed to open billing portal. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <div>
+      <Button variant="secondary" size="sm" onClick={handleClick} isLoading={isLoading}>
+        Manage Billing
+      </Button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }

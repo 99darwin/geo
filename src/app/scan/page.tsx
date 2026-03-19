@@ -77,7 +77,7 @@ function ScanPageContent() {
               ? 'Your scan results have been saved. Check your full visibility report.'
               : 'Get monthly reports, AI-optimized files, competitor tracking, and more.'}
           </p>
-          <Link href={session ? '/dashboard' : '/login'} className="mt-6 inline-block">
+          <Link href={session ? `/onboarding${url ? `?url=${encodeURIComponent(url)}` : ''}` : '/login'} className="mt-6 inline-block">
             <Button
               variant="secondary"
               size="lg"
