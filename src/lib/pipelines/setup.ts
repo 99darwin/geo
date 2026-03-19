@@ -42,9 +42,18 @@ export async function runSetupPipeline(clientId: string): Promise<void> {
       Date.now() - client.updatedAt.getTime() > STALE_RUNNING_THRESHOLD_MS
     ) {
       console.log("[Setup Pipeline] Reclaiming stale setup_running for client:", clientId);
+      // Atomic reclaim: reset to setup_pending, then re-claim below won't race
+      // because only one process can win the setup_running → setup_pending transition
+      // (updatedAt filter ensures we only match the stale row).
+      const staleThreshold = new Date(Date.now() - STALE_RUNNING_THRESHOLD_MS);
+      await prisma.client.updateMany({
+        where: { id: clientId, onboardingStatus: "setup_running", updatedAt: { lt: staleThreshold } },
+        data: { onboardingStatus: "setup_pending" },
+      });
+      // Now attempt the normal pending → running claim
       claimed = await prisma.client.updateMany({
-        where: { id: clientId, onboardingStatus: "setup_running" },
-        data: { onboardingStatus: "setup_running" }, // touch updatedAt
+        where: { id: clientId, onboardingStatus: "setup_pending" },
+        data: { onboardingStatus: "setup_running" },
       });
     }
 

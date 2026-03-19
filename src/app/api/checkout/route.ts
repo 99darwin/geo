@@ -46,7 +46,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const { url } = parsed.data;
-  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const baseUrl = process.env.NEXTAUTH_URL;
+  if (!baseUrl) {
+    console.error("[Checkout] NEXTAUTH_URL is not set");
+    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+  }
 
   const setupPriceId = process.env.STRIPE_STARTER_SETUP_PRICE_ID;
   const monthlyPriceId = process.env.STRIPE_STARTER_MONTHLY_PRICE_ID;

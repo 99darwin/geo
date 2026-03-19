@@ -89,6 +89,29 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  // Guard against multiple clients per user (e.g. two checkout sessions with different Stripe customers)
+  const existingByUser = await prisma.client.findFirst({
+    where: { userId },
+  });
+  if (existingByUser) {
+    console.warn("[Stripe Webhook] User already has a client record:", userId, existingByUser.id);
+    // Update with latest Stripe IDs rather than creating a duplicate
+    await prisma.client.update({
+      where: { id: existingByUser.id },
+      data: {
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscriptionId,
+      },
+    });
+    if (
+      existingByUser.onboardingStatus === "setup_pending" ||
+      existingByUser.onboardingStatus === "setup_running"
+    ) {
+      dispatchSetupPipeline(existingByUser.id);
+    }
+    return;
+  }
+
   const client = await prisma.client.create({
     data: {
       businessName: extractDomainName(websiteUrl),
