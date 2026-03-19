@@ -48,7 +48,7 @@ async function crawlUrl(
   // Extract business info from crawled content
   return {
     businessName: metadata.title ?? extractBusinessName(content, url),
-    category: metadata.ogDescription ? inferCategory(metadata.ogDescription) : null,
+    category: null, // Inferred by Claude during query generation from actual page content
     city: null,
     state: null,
     phone: extractPhone(content),
@@ -76,20 +76,8 @@ function extractBusinessName(content: string, url: string): string {
   }
 }
 
-function inferCategory(description: string): string | null {
-  // Basic heuristic — will be refined by Claude query gen
-  const lower = description.toLowerCase();
-  const categories = [
-    "restaurant", "dental", "dentist", "plumber", "plumbing", "lawyer", "law",
-    "salon", "spa", "gym", "fitness", "clinic", "medical", "doctor",
-    "veterinary", "vet", "auto", "mechanic", "roofing", "roofer",
-    "electrician", "hvac", "accounting", "accountant", "realtor", "real estate",
-  ];
-  for (const cat of categories) {
-    if (lower.includes(cat)) return cat;
-  }
-  return null;
-}
+// inferCategory removed — category is now determined by Claude from actual page content
+// during query generation, which handles all industries without a hardcoded keyword list
 
 function extractPhone(content: string): string | null {
   const phoneMatch = content.match(
@@ -98,17 +86,31 @@ function extractPhone(content: string): string | null {
   return phoneMatch ? phoneMatch[0] : null;
 }
 
+interface QueryGenResult {
+  category: string;
+  queries: string[];
+}
+
 async function generateQueries(
   businessName: string,
-  category: string | null,
   city: string | null,
+  description: string | null,
+  rawContent: string | null,
   signal: AbortSignal
-): Promise<string[]> {
+): Promise<QueryGenResult> {
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (!anthropicKey) throw new Error("ANTHROPIC_API_KEY is not configured");
 
   const locationStr = city ?? "their area";
-  const categoryStr = category ?? "local business";
+
+  // Build context from the crawled page so Claude knows what the business actually does
+  let businessContext = "";
+  if (description) {
+    businessContext += `\nBusiness description: "${description}"`;
+  }
+  if (rawContent) {
+    businessContext += `\nPage content excerpt: "${rawContent.slice(0, 1500)}"`;
+  }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -123,7 +125,16 @@ async function generateQueries(
       messages: [
         {
           role: "user",
-          content: `Generate 3-5 queries that a real person would ask an AI assistant when looking for a ${categoryStr} in ${locationStr}. The business is "${businessName}". Include direct queries, problem-based queries, and specific service queries. Return as a JSON array of strings. No numbering, no explanation.`,
+          content: `You are helping check a business's visibility in AI search results. Analyze the provided context to determine what this business does, then generate search queries.
+
+Business name: "${businessName}"
+Location: ${locationStr}${businessContext}
+
+Return a JSON object with:
+- "category": a short label for what this business is (e.g. "clothing store", "dental clinic", "plumbing contractor", "italian restaurant"). Infer this from the page content, not assumptions.
+- "queries": 3-5 realistic queries a person would ask an AI assistant when looking for this type of business. Queries MUST match the actual business type. Include direct, problem-based, and specific product/service queries.
+
+Return ONLY the JSON object, no explanation.`,
         },
       ],
     }),
@@ -135,18 +146,42 @@ async function generateQueries(
   }
 
   const json = await response.json();
-  const text: string = json.content?.[0]?.text ?? "[]";
+  const text: string = json.content?.[0]?.text ?? "{}";
 
-  // Extract JSON array from response
-  const arrayMatch = text.match(/\[[\s\S]*\]/);
-  if (!arrayMatch) return [`best ${categoryStr} in ${locationStr}`];
-
-  try {
-    const queries = JSON.parse(arrayMatch[0]) as string[];
-    return queries.slice(0, 5);
-  } catch {
-    return [`best ${categoryStr} in ${locationStr}`];
+  // Try parsing as { category, queries } object first
+  const objectMatch = text.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try {
+      const parsed = JSON.parse(objectMatch[0]) as { category?: string; queries?: string[] };
+      if (parsed.queries && Array.isArray(parsed.queries)) {
+        return {
+          category: parsed.category ?? "local business",
+          queries: parsed.queries.filter((q): q is string => typeof q === "string").slice(0, 5),
+        };
+      }
+    } catch {
+      // Fall through to array parsing
+    }
   }
+
+  // Fallback: try parsing as plain array (backwards compat)
+  const arrayMatch = text.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try {
+      const queries = JSON.parse(arrayMatch[0]) as string[];
+      return {
+        category: "local business",
+        queries: queries.slice(0, 5),
+      };
+    } catch {
+      // Fall through to default
+    }
+  }
+
+  return {
+    category: "local business",
+    queries: [`best ${businessName} in ${locationStr}`],
+  };
 }
 
 async function checkCitationOnPlatform(
@@ -437,14 +472,14 @@ export async function runFreeScan(url: string): Promise<ScanResult> {
     );
 
     const businessName = crawlResult.businessName;
-    const category = crawlResult.category;
     const city = crawlResult.city;
 
-    // Step 2: Generate queries
-    const queries = await withTimeout(
-      (s) => generateQueries(businessName, category, city, s),
+    // Step 2: Generate queries (Claude infers category from page content)
+    const queryGenResult = await withTimeout(
+      (s) => generateQueries(businessName, city, crawlResult.description, crawlResult.rawContent, s),
       QUERY_GEN_TIMEOUT_MS
     );
+    const { category, queries } = queryGenResult;
 
     // Step 3: Citation checks — queries x platforms in parallel
     const citationTasks: {
