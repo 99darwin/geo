@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
+import { waitUntil } from "@vercel/functions";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
@@ -19,7 +20,7 @@ function extractDomainName(url: string): string {
 
 /**
  * Dispatch the setup pipeline to the internal endpoint.
- * Fire-and-forget — returns immediately so the webhook responds within Stripe's timeout.
+ * Uses waitUntil to keep the serverless function alive until the fetch completes.
  */
 function dispatchSetupPipeline(clientId: string) {
   const setupSecret = process.env.SETUP_PIPELINE_SECRET;
@@ -27,16 +28,23 @@ function dispatchSetupPipeline(clientId: string) {
     console.error("[Stripe Webhook] SETUP_PIPELINE_SECRET not set, cannot dispatch pipeline");
     return;
   }
-  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
-  fetch(`${baseUrl}/api/setup/${clientId}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${setupSecret}`,
-    },
-  }).catch((err) => {
-    console.error("[Stripe Webhook] Failed to dispatch setup pipeline:", err instanceof Error ? err.message : err);
-  });
+  const baseUrl = process.env.NEXTAUTH_URL;
+  if (!baseUrl) {
+    console.error("[Stripe Webhook] NEXTAUTH_URL is not set, cannot dispatch pipeline");
+    return;
+  }
+
+  waitUntil(
+    fetch(`${baseUrl}/api/setup/${clientId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${setupSecret}`,
+      },
+    }).catch((err) => {
+      console.error("[Stripe Webhook] Failed to dispatch setup pipeline:", err instanceof Error ? err.message : err);
+    })
+  );
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
@@ -70,8 +78,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   if (existing) {
     console.log("[Stripe Webhook] Client already exists for customer:", customerId);
-    // If setup was interrupted, re-dispatch it (atomic claim happens inside the pipeline)
-    if (existing.onboardingStatus === "setup_pending") {
+    // If setup was interrupted (pending) or the pipeline process was killed (running),
+    // re-dispatch. The atomic claim inside the pipeline prevents true duplicates.
+    if (
+      existing.onboardingStatus === "setup_pending" ||
+      existing.onboardingStatus === "setup_running"
+    ) {
       dispatchSetupPipeline(existing.id);
     }
     return;
@@ -92,7 +104,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   console.log("[Stripe Webhook] Client created:", client.id);
 
-  // Dispatch setup pipeline asynchronously — don't await
+  // Dispatch setup pipeline asynchronously via waitUntil
   dispatchSetupPipeline(client.id);
 }
 

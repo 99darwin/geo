@@ -18,19 +18,40 @@ const ALL_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity", "gemini"];
  * Idempotent: uses atomic claim on onboardingStatus to prevent concurrent runs,
  * and cleans up existing records before re-creating them on retries.
  */
+const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+
 export async function runSetupPipeline(clientId: string): Promise<void> {
   console.log("[Setup Pipeline] Starting for client:", clientId);
 
-  // Atomic claim: only one process can transition setup_pending → setup_running.
-  // If another process already claimed it, bail out.
-  const claimed = await prisma.client.updateMany({
+  // First try: claim setup_pending → setup_running
+  let claimed = await prisma.client.updateMany({
     where: { id: clientId, onboardingStatus: "setup_pending" },
     data: { onboardingStatus: "setup_running" },
   });
 
   if (claimed.count === 0) {
-    console.log("[Setup Pipeline] Already claimed or completed for client:", clientId);
-    return;
+    // If stuck in setup_running (process was killed, catch never ran),
+    // reclaim if it's been stale for over 10 minutes.
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { onboardingStatus: true, updatedAt: true },
+    });
+
+    if (
+      client?.onboardingStatus === "setup_running" &&
+      Date.now() - client.updatedAt.getTime() > STALE_RUNNING_THRESHOLD_MS
+    ) {
+      console.log("[Setup Pipeline] Reclaiming stale setup_running for client:", clientId);
+      claimed = await prisma.client.updateMany({
+        where: { id: clientId, onboardingStatus: "setup_running" },
+        data: { onboardingStatus: "setup_running" }, // touch updatedAt
+      });
+    }
+
+    if (claimed.count === 0) {
+      console.log("[Setup Pipeline] Already claimed or completed for client:", clientId);
+      return;
+    }
   }
 
   try {

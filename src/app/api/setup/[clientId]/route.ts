@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
+import { waitUntil } from "@vercel/functions";
 import { runSetupPipeline } from "@/lib/pipelines/setup";
 
 /**
  * Internal endpoint to trigger the setup pipeline for a client.
  * Called by the Stripe webhook handler after creating the client record.
  * Protected by SETUP_PIPELINE_SECRET — fails closed if secret is unset.
+ *
+ * Uses waitUntil to run the pipeline in the background so the response
+ * returns immediately and the function isn't killed by serverless timeout.
  */
 export async function POST(
   request: NextRequest,
@@ -32,15 +36,14 @@ export async function POST(
     return NextResponse.json({ error: "Missing clientId" }, { status: 400 });
   }
 
-  try {
-    await runSetupPipeline(clientId);
-    return NextResponse.json({ data: { success: true } });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[Setup API] Pipeline failed for client:", clientId, message);
-    return NextResponse.json(
-      { error: "Setup pipeline failed" },
-      { status: 500 }
-    );
-  }
+  // Run pipeline in the background via waitUntil — returns 200 immediately
+  // so the calling webhook handler isn't blocked.
+  waitUntil(
+    runSetupPipeline(clientId).catch((error) => {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("[Setup API] Pipeline failed for client:", clientId, message);
+    })
+  );
+
+  return NextResponse.json({ data: { accepted: true } });
 }

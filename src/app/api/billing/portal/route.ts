@@ -22,7 +22,11 @@ export async function POST(): Promise<NextResponse> {
     );
   }
 
-  const baseUrl = process.env.NEXTAUTH_URL || "http://localhost:3000";
+  const baseUrl = process.env.NEXTAUTH_URL;
+  if (!baseUrl) {
+    console.error("[Billing Portal] NEXTAUTH_URL is not set");
+    return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
+  }
 
   try {
     const stripe = getStripe();
