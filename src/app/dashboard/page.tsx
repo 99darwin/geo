@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScoreGauge } from '@/components/ui/score-gauge';
+import { DashboardScanForm } from '@/components/dashboard-scan-form';
 
 interface DashboardData {
   client: {
@@ -92,9 +93,25 @@ export default function DashboardPage() {
     );
   }
 
-  // No client yet — show upgrade CTA
+  // No client yet — show scan form for new users
   if (!data) {
-    return <FreeScanState />;
+    return (
+      <div className="mx-auto max-w-4xl">
+        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="mt-1 text-gray-500">Welcome to your AI visibility dashboard.</p>
+        <Card className="mt-8">
+          <div className="flex flex-col items-center py-12">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Scan your website to get started
+            </h2>
+            <p className="mt-2 mb-6 text-gray-500 max-w-md text-center">
+              Enter your business URL below to check how visible you are to AI search engines.
+            </p>
+            <DashboardScanForm />
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   const { client } = data;
@@ -173,7 +190,7 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
 
   return (
     <div className="mx-auto max-w-4xl">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{client.businessName}</h1>
           <p className="mt-1 text-gray-500">
@@ -183,7 +200,12 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
         <ManageBillingButton />
       </div>
 
-      <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <Card className="mt-6">
+        <p className="text-sm font-medium text-gray-500 mb-3">Run a new scan</p>
+        <DashboardScanForm />
+      </Card>
+
+      <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Visibility Score */}
         <Card className="flex flex-col items-center">
           <p className="text-sm font-medium text-gray-500 mb-2">Visibility Score</p>

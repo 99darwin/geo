@@ -2,6 +2,7 @@
 
 import { useRef, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 
 const URL_PATTERN = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
 
@@ -11,6 +12,7 @@ interface HeroSearchProps {
 
 export function HeroSearch({ onUrlChange }: HeroSearchProps) {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
@@ -43,7 +45,11 @@ export function HeroSearch({ onUrlChange }: HeroSearchProps) {
     setError('');
 
     try {
-      const response = await fetch('/api/scan', {
+      const endpoint =
+        sessionStatus !== 'loading' && session
+          ? '/api/dashboard/scan'
+          : '/api/scan';
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: normalizedUrl }),
@@ -55,6 +61,10 @@ export function HeroSearch({ onUrlChange }: HeroSearchProps) {
 
       if (response.ok) {
         sessionStorage.setItem('scanResult', JSON.stringify(data.data));
+        sessionStorage.setItem(
+          'scanPersisted',
+          data.persisted !== undefined ? String(data.persisted) : 'false'
+        );
         router.push(`/scan?url=${encodeURIComponent(trimmed)}`);
         return;
       }
