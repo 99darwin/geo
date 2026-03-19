@@ -104,12 +104,13 @@ async function generateQueries(
   const locationStr = city ?? "their area";
 
   // Build context from the crawled page so Claude knows what the business actually does
+  // Wrap in XML tags and strip angle brackets to mitigate prompt injection from adversarial sites
   let businessContext = "";
   if (description) {
-    businessContext += `\nBusiness description: "${description}"`;
+    businessContext += `\n<business_description>${description.replace(/[<>]/g, "")}</business_description>`;
   }
   if (rawContent) {
-    businessContext += `\nPage content excerpt: "${rawContent.slice(0, 1500)}"`;
+    businessContext += `\n<page_content>${rawContent.slice(0, 1500).replace(/[<>]/g, "")}</page_content>`;
   }
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -154,10 +155,13 @@ Return ONLY the JSON object, no explanation.`,
     try {
       const parsed = JSON.parse(objectMatch[0]) as { category?: string; queries?: string[] };
       if (parsed.queries && Array.isArray(parsed.queries)) {
-        return {
-          category: parsed.category ?? "local business",
-          queries: parsed.queries.filter((q): q is string => typeof q === "string").slice(0, 5),
-        };
+        const filtered = parsed.queries.filter((q): q is string => typeof q === "string").slice(0, 5);
+        if (filtered.length > 0) {
+          return {
+            category: parsed.category ?? "local business",
+            queries: filtered,
+          };
+        }
       }
     } catch {
       // Fall through to array parsing
@@ -168,11 +172,10 @@ Return ONLY the JSON object, no explanation.`,
   const arrayMatch = text.match(/\[[\s\S]*\]/);
   if (arrayMatch) {
     try {
-      const queries = JSON.parse(arrayMatch[0]) as string[];
-      return {
-        category: "local business",
-        queries: queries.slice(0, 5),
-      };
+      const queries = (JSON.parse(arrayMatch[0]) as string[]).filter((q): q is string => typeof q === "string").slice(0, 5);
+      if (queries.length > 0) {
+        return { category: "local business", queries };
+      }
     } catch {
       // Fall through to default
     }
