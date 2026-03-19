@@ -40,6 +40,14 @@ export function ShareButton({ result }: ShareButtonProps) {
   const [shareUrl, setShareUrl] = useState('');
 
   async function handleShare() {
+    // Reuse already-created share URL instead of creating a new DB record
+    if (shareUrl) {
+      const copied = await copyToClipboard(shareUrl);
+      setState(copied ? 'copied' : 'showUrl');
+      if (copied) setTimeout(() => setState('idle'), 3000);
+      return;
+    }
+
     setState('loading');
 
     try {
@@ -57,13 +65,13 @@ export function ShareButton({ result }: ShareButtonProps) {
 
       const json = await res.json();
       const url = json.data.url;
+      setShareUrl(url);
 
       const copied = await copyToClipboard(url);
       if (copied) {
         setState('copied');
         setTimeout(() => setState('idle'), 3000);
       } else {
-        setShareUrl(url);
         setState('showUrl');
       }
     } catch {

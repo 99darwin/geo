@@ -111,13 +111,19 @@ export async function POST(
       },
     });
 
-    const baseUrl =
-      process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL;
+    if (!baseUrl) {
+      console.warn(
+        "[POST /api/reports/share] NEXT_PUBLIC_APP_URL is not set; " +
+          "falling back to request origin — share URLs may be incorrect behind a proxy"
+      );
+    }
+    const origin = baseUrl ?? new URL(request.url).origin;
 
     return NextResponse.json({
       data: {
         token: report.token,
-        url: `${baseUrl}/report/${report.token}`,
+        url: `${origin}/report/${report.token}`,
       },
     });
   } catch (error) {
