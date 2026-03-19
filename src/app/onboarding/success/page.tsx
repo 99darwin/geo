@@ -22,6 +22,13 @@ export default function OnboardingSuccessPage() {
 
       try {
         const res = await fetch('/api/dashboard');
+
+        // No client record exists — user landed here without completing checkout
+        if (res.status === 404) {
+          router.push('/dashboard');
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
           const onboardingStatus = data.data?.client?.onboardingStatus;

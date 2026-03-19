@@ -297,8 +297,12 @@ async function executeSetupSteps(clientId: string): Promise<void> {
  * Remove data from a previous interrupted pipeline run so we start clean.
  */
 async function cleanupPreviousRun(clientId: string): Promise<void> {
-  const existingQueries = await prisma.query.count({ where: { clientId } });
-  if (existingQueries === 0) return;
+  const [existingFiles, existingQueries] = await Promise.all([
+    prisma.generatedFile.count({ where: { clientId } }),
+    prisma.query.count({ where: { clientId } }),
+  ]);
+
+  if (existingFiles === 0 && existingQueries === 0) return;
 
   console.log("[Setup Pipeline] Cleaning up previous run for client:", clientId);
 

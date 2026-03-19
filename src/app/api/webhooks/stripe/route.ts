@@ -109,7 +109,15 @@ async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
   const status = subscription.status;
   console.log("[Stripe Webhook] Subscription status update:", subscription.id, "→", status);
 
-  if (status === "canceled" || status === "unpaid") {
+  if (status === "active" || status === "trialing") {
+    if (client.plan === "free_scan") {
+      await prisma.client.update({
+        where: { id: client.id },
+        data: { plan: "starter" },
+      });
+      console.log("[Stripe Webhook] Client reactivated to starter:", client.id);
+    }
+  } else if (status === "canceled" || status === "unpaid") {
     await prisma.client.update({
       where: { id: client.id },
       data: { plan: "free_scan" },

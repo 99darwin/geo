@@ -324,25 +324,32 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
 
 function ManageBillingButton() {
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleClick() {
     setIsLoading(true);
+    setError('');
     try {
       const res = await fetch('/api/billing/portal', { method: 'POST' });
       const json = await res.json();
       if (json.data?.url) {
         window.location.href = json.data.url;
+      } else {
+        setError('Failed to open billing portal. Please try again.');
       }
     } catch {
-      // Silently fail — user can retry
+      setError('Failed to open billing portal. Please try again.');
     } finally {
       setIsLoading(false);
     }
   }
 
   return (
-    <Button variant="secondary" size="sm" onClick={handleClick} isLoading={isLoading}>
-      Manage Billing
-    </Button>
+    <div>
+      <Button variant="secondary" size="sm" onClick={handleClick} isLoading={isLoading}>
+        Manage Billing
+      </Button>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
   );
 }
