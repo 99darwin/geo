@@ -5,8 +5,17 @@ import type { ApiResponse } from "@/types";
 export async function POST(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<{ deleted: number }>>> {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error("[POST /api/cron/cleanup-reports] CRON_SECRET not configured");
+    return NextResponse.json(
+      { error: "Server misconfiguration" },
+      { status: 500 }
+    );
+  }
+
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

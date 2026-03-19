@@ -14,7 +14,11 @@ export default function SharedReportPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setError('Invalid report link');
+      setLoading(false);
+      return;
+    }
 
     fetch(`/api/reports/${token}`)
       .then(async (res) => {

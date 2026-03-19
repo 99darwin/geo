@@ -83,8 +83,8 @@ export async function POST(
     );
   }
 
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && parseInt(contentLength, 10) > MAX_BODY_BYTES) {
+  const buf = await request.arrayBuffer();
+  if (buf.byteLength > MAX_BODY_BYTES) {
     return NextResponse.json(
       { error: "Request body too large" },
       { status: 413 }
@@ -93,7 +93,7 @@ export async function POST(
 
   let body: unknown;
   try {
-    body = await request.json();
+    body = JSON.parse(new TextDecoder().decode(buf));
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }

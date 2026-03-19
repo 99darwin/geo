@@ -13,4 +13,4 @@ CREATE TABLE "SharedReport" (
 CREATE UNIQUE INDEX "SharedReport_token_key" ON "SharedReport"("token");
 
 -- CreateIndex
-CREATE INDEX "SharedReport_token_idx" ON "SharedReport"("token");
+CREATE INDEX "SharedReport_expiresAt_idx" ON "SharedReport"("expiresAt");

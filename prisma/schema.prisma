@@ -308,5 +308,5 @@ model SharedReport {
   createdAt DateTime @default(now())
   expiresAt DateTime
 
-  @@index([token])
+  @@index([expiresAt])
 }
