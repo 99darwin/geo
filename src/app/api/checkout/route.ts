@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { getStripe } from "@/lib/stripe";
+import { prisma } from "@/lib/db";
 import { rateLimit } from "@/lib/rate-limit";
 
 const checkoutSchema = z.object({
@@ -27,6 +28,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json(
       { error: "Too many checkout attempts. Please try again later." },
       { status: 429 }
+    );
+  }
+
+  // Prevent duplicate subscriptions — redirect to billing portal if already subscribed
+  const existingClient = await prisma.client.findUnique({
+    where: { userId: session.user.id },
+    select: { plan: true, stripeCustomerId: true },
+  });
+  if (existingClient?.plan !== "free_scan" && existingClient?.stripeCustomerId) {
+    return NextResponse.json(
+      { error: "You already have an active subscription. Use the billing portal to manage it." },
+      { status: 409 }
     );
   }
 

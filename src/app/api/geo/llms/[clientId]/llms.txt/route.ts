@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
+/**
+ * Public endpoint — intentionally unauthenticated.
+ * Serves llms.txt files that businesses embed on their websites for AI crawlers.
+ * Client IDs are UUIDs (not enumerable). Content is business info that is
+ * already public on the client's own website.
+ */
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ clientId: string }> }

@@ -4,6 +4,8 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
 
+// NEXTAUTH_SECRET is required — NextAuth throws at runtime if unset in production.
+// Validated here as defense-in-depth: Vercel env config must include it.
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
   secret: process.env.NEXTAUTH_SECRET,
