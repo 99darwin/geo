@@ -23,7 +23,7 @@ const MAX_QUERY_LENGTH = 200;
  */
 function sanitizeForPrompt(text: string, maxLength: number = 500): string {
   return text
-    .replace(/[<>`]/g, "")
+    .replace(/[<>`"]/g, "")
     .replace(/\r?\n/g, " ")
     .trim()
     .slice(0, maxLength);
@@ -182,14 +182,14 @@ Return ONLY the JSON object, no explanation.`,
   const objectMatch = text.match(/\{[\s\S]*\}/);
   if (objectMatch) {
     try {
-      const parsed = JSON.parse(objectMatch[0]) as { category?: string; queries?: string[] };
+      const parsed = JSON.parse(objectMatch[0]) as { category?: unknown; queries?: unknown[] };
       if (parsed.queries && Array.isArray(parsed.queries)) {
         const filtered = parsed.queries
           .filter((q): q is string => typeof q === "string" && isValidQuery(q))
           .slice(0, 5);
         if (filtered.length > 0) {
           return {
-            category: sanitizeForPrompt(parsed.category ?? "local business", 100),
+            category: sanitizeForPrompt(typeof parsed.category === "string" ? parsed.category : "local business", 100),
             queries: filtered,
           };
         }
