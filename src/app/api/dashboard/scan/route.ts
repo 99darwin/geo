@@ -179,6 +179,7 @@ async function persistScanResults(
   // Save visibility score
   const now = new Date();
   const period = new Date(now.getFullYear(), now.getMonth(), 1);
+  const breakdownJson = JSON.parse(JSON.stringify(result.breakdown));
 
   await prisma.visibilityScore.upsert({
     where: {
@@ -188,7 +189,7 @@ async function persistScanResults(
       score: result.score,
       queryCoverage: result.breakdown.queryCoverage,
       platformCoverage: result.breakdown.platformCoverage,
-      breakdown: result.breakdown as unknown as Record<string, unknown>,
+      breakdown: breakdownJson,
     },
     create: {
       clientId,
@@ -196,7 +197,7 @@ async function persistScanResults(
       queryCoverage: result.breakdown.queryCoverage,
       platformCoverage: result.breakdown.platformCoverage,
       period,
-      breakdown: result.breakdown as unknown as Record<string, unknown>,
+      breakdown: breakdownJson,
     },
   });
 }
