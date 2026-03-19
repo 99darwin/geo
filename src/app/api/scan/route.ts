@@ -29,8 +29,10 @@ export async function POST(
   }
 
   // Rate limit by IP
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "anonymous";
+  const ip =
+    request.headers.get("x-real-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "anonymous";
   const { success, remaining } = checkRateLimit(ip);
 
   if (!success) {

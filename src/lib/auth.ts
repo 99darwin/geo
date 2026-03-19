@@ -3,10 +3,15 @@ import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./db";
+import { rateLimit } from "./rate-limit";
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const loginRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 10 });
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
-  session: { strategy: "jwt" },
+  secret: process.env.NEXTAUTH_SECRET,
+  session: { strategy: "jwt", maxAge: 60 * 60 }, // 1 hour — forces role refresh
   pages: {
     signIn: "/login",
   },
@@ -19,6 +24,10 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
+
+        // Rate limit login attempts by email
+        const { success } = loginRateLimit(credentials.email);
+        if (!success) return null;
 
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
@@ -33,7 +42,7 @@ export const authOptions: NextAuthOptions = {
 
         if (!isValid) return null;
 
-        return { id: user.id, email: user.email, name: user.name };
+        return { id: user.id, email: user.email, name: user.name, role: user.role };
       },
     }),
   ],
@@ -41,12 +50,21 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
+        session.user.role = (token.role as string) ?? "user";
       }
       return session;
     },
     async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
+        token.role = (user as unknown as Record<string, unknown>).role as string;
+      } else if (token.sub) {
+        // Re-read role from DB on every token refresh to catch role changes
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { role: true },
+        });
+        token.role = dbUser?.role ?? "user";
       }
       return token;
     },
