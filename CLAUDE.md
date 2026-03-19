@@ -65,6 +65,17 @@ All AI citation checkers implement `PlatformChecker` interface (defined in `src/
 - AI responses are non-deterministic. Run each (query, platform) 3x and take majority for `cited`. Frame results as "based on our latest check."
 - Name matching must handle: abbreviations, missing articles ("The"), possessives, partial matches. Use case-insensitive substring + Levenshtein distance < 3.
 
+## Contributing Rules
+
+- **Never push directly to `main`.** All changes go through pull requests.
+- Create feature branches: `feat/`, `fix/`, `chore/` prefixes.
+- Keep PRs focused — under 300 lines when possible.
+- Run `npm run lint` and `npm run build` before opening a PR.
+- Verify no secrets in diff: `git diff --staged | grep -iE "(key|secret|password|token)"`
+- Write conventional commit messages (`feat:`, `fix:`, `chore:`).
+- Don't merge your own PRs without review approval.
+- Never commit `.env` files or any file containing secrets.
+
 ## Build Phases
 
 The project follows a phased build order: Foundation → Free Scan → Onboarding + Setup → Dashboard → Admin → Monitoring + Reports. Each phase should be working before starting the next. See the bottom of SPEC.md for detailed phase steps.
