@@ -169,16 +169,21 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     return;
   }
 
+  // Preserve setup_pending/setup_running so resubscription can re-dispatch the pipeline;
+  // only reset to scan_complete if setup actually completed.
+  const shouldResetStatus =
+    client.onboardingStatus === "setup_complete" || client.onboardingStatus === "active";
+
   await prisma.client.update({
     where: { id: client.id },
     data: {
       plan: "free_scan",
-      onboardingStatus: "scan_complete",
+      onboardingStatus: shouldResetStatus ? "scan_complete" : client.onboardingStatus,
       stripeSubscriptionId: null,
     },
   });
 
-  console.log("[Stripe Webhook] Client churned:", client.id);
+  console.log("[Stripe Webhook] Client churned:", client.id, "status preserved:", !shouldResetStatus);
 }
 
 async function handlePaymentFailed(invoice: Stripe.Invoice) {
