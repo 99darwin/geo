@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import type { ScanResult } from '@/types';
 import { ScanResults } from '@/components/scan-results';
@@ -9,8 +10,10 @@ import { Button } from '@/components/ui/button';
 
 function ScanPageContent() {
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const url = searchParams.get('url');
   const [result, setResult] = useState<ScanResult | null>(null);
+  const [persisted, setPersisted] = useState(false);
   const [hasChecked, setHasChecked] = useState(false);
 
   useEffect(() => {
@@ -22,6 +25,7 @@ function ScanPageContent() {
         // Corrupted data — ignore
       }
     }
+    setPersisted(sessionStorage.getItem('scanPersisted') === 'true');
     setHasChecked(true);
   }, []);
 
@@ -61,19 +65,20 @@ function ScanPageContent() {
         {/* CTA */}
         <div className="mt-12 rounded-2xl bg-indigo-600 p-8 text-center text-white">
           <h2 className="text-2xl font-bold">
-            Want Continuous AI Monitoring?
+            {session ? 'View Your Dashboard' : 'Want Continuous AI Monitoring?'}
           </h2>
           <p className="mt-2 text-indigo-100">
-            Get monthly reports, AI-optimized files, competitor tracking, and
-            more.
+            {session && persisted
+              ? 'Your scan results have been saved. Check your full visibility report.'
+              : 'Get monthly reports, AI-optimized files, competitor tracking, and more.'}
           </p>
-          <Link href="/login" className="mt-6 inline-block">
+          <Link href={session ? '/dashboard' : '/login'} className="mt-6 inline-block">
             <Button
               variant="secondary"
               size="lg"
               className="bg-white text-indigo-600 hover:bg-indigo-50 border-transparent"
             >
-              Get Full Monitoring
+              {session ? 'Go to Dashboard' : 'Get Full Monitoring'}
             </Button>
           </Link>
         </div>

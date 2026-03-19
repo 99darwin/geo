@@ -3,6 +3,7 @@ import { z } from "zod/v4";
 import { rateLimit } from "@/lib/rate-limit";
 import { runFreeScan } from "@/lib/pipelines/free-scan";
 import { TimeoutError } from "@/lib/utils";
+import { isBlockedUrl } from "@/lib/url-validation";
 import type { ApiResponse, ScanResult } from "@/types";
 
 const scanSchema = z.object({
@@ -51,6 +52,14 @@ export async function POST(
           "X-RateLimit-Remaining": String(remaining),
         },
       }
+    );
+  }
+
+  // SSRF protection
+  if (isBlockedUrl(parsed.data.url)) {
+    return NextResponse.json(
+      { error: "Please enter a public website URL." },
+      { status: 400 }
     );
   }
 
