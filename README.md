@@ -36,27 +36,30 @@ Create a `.env` file in the project root with the following:
 
 ```env
 # Database
-DATABASE_URL="postgresql://user:password@localhost:5432/geo_platform"
+DATABASE_URL=postgresql://user:pass@localhost:5432/geo
 
 # Auth
-NEXTAUTH_SECRET="your-nextauth-secret"
-NEXTAUTH_URL="http://localhost:3000"
-
-# Stripe
-STRIPE_SECRET_KEY="sk_test_..."
-STRIPE_WEBHOOK_SECRET="whsec_..."
+NEXTAUTH_SECRET=<generate with `openssl rand -base64 32`>
+NEXTAUTH_URL=http://localhost:3000
 
 # AI APIs
-ANTHROPIC_API_KEY="sk-ant-..."
-OPENAI_API_KEY="sk-..."
-PERPLEXITY_API_KEY="pplx-..."
-GOOGLE_GEMINI_API_KEY="..."
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
+PERPLEXITY_API_KEY=pplx-...
+GOOGLE_GEMINI_API_KEY=...
 
 # Crawling
-FIRECRAWL_API_KEY="fc-..."
+FIRECRAWL_API_KEY=fc-...
 
-# Email (optional for local dev)
-RESEND_API_KEY="re_..."
+# Stripe (stubbed but referenced)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+# one-time $299
+STRIPE_STARTER_SETUP_PRICE_ID=  
+# recurring $49/mo
+STRIPE_STARTER_MONTHLY_PRICE_ID=
+# optional, protects the internal setup endpoint
+SETUP_PIPELINE_SECRET=
 ```
 
 ### 3. Database setup
