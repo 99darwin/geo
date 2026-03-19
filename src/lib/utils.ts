@@ -2,6 +2,7 @@ export class TimeoutError extends Error {
   constructor(timeoutMs: number) {
     super(`Operation timed out after ${timeoutMs}ms`);
     this.name = "TimeoutError";
+    Object.setPrototypeOf(this, TimeoutError.prototype);
   }
 }
 

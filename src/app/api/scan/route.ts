@@ -73,7 +73,7 @@ export async function POST(
 
     const userMessage = errorMessage.includes("is not configured")
       ? "Service configuration error. Please contact support."
-      : `Scan failed: ${errorMessage}`;
+      : "Scan failed. Please try again later.";
 
     return NextResponse.json({ error: userMessage }, { status: 500 });
   }
