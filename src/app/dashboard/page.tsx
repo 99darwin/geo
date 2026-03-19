@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { DashboardScanForm } from '@/components/dashboard-scan-form';
@@ -50,8 +50,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const loadDashboard = useCallback(() => {
-    setLoading(true);
+  useEffect(() => {
     fetch('/api/dashboard')
       .then(async (res) => {
         if (res.status === 404) {
@@ -65,10 +64,6 @@ export default function DashboardPage() {
       .catch(() => setError('Failed to load dashboard data.'))
       .finally(() => setLoading(false));
   }, []);
-
-  useEffect(() => {
-    loadDashboard();
-  }, [loadDashboard]);
 
   if (loading) {
     return (
@@ -110,7 +105,7 @@ export default function DashboardPage() {
             <p className="mt-2 mb-6 text-gray-500 max-w-md text-center">
               Enter your business URL below to check how visible you are to AI search engines.
             </p>
-            <DashboardScanForm onScanComplete={loadDashboard} />
+            <DashboardScanForm />
           </div>
         </Card>
       </div>
@@ -135,7 +130,7 @@ export default function DashboardPage() {
 
       <Card className="mt-6">
         <p className="text-sm font-medium text-gray-500 mb-3">Run a new scan</p>
-        <DashboardScanForm onScanComplete={loadDashboard} />
+        <DashboardScanForm />
       </Card>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

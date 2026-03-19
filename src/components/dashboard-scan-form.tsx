@@ -7,11 +7,7 @@ import { Input } from '@/components/ui/input';
 
 const URL_PATTERN = /^(https?:\/\/)?[\w.-]+\.[a-z]{2,}(\/.*)?$/i;
 
-interface DashboardScanFormProps {
-  onScanComplete: () => void;
-}
-
-export function DashboardScanForm({ onScanComplete }: DashboardScanFormProps) {
+export function DashboardScanForm() {
   const router = useRouter();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
@@ -58,10 +54,10 @@ export function DashboardScanForm({ onScanComplete }: DashboardScanFormProps) {
 
       // Store result and navigate to detailed results view
       sessionStorage.setItem('scanResult', JSON.stringify(data.data));
-      if (data.persisted !== undefined) {
-        sessionStorage.setItem('scanPersisted', String(data.persisted));
-      }
-      onScanComplete();
+      sessionStorage.setItem(
+        'scanPersisted',
+        data.persisted !== undefined ? String(data.persisted) : 'false'
+      );
       router.push(`/scan?url=${encodeURIComponent(normalizedUrl)}`);
     } catch {
       setError('Network error. Please check your connection and try again.');
