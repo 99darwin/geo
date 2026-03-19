@@ -34,6 +34,10 @@ export function HeroSearch({ onUrlChange }: HeroSearchProps) {
       return;
     }
 
+    const normalizedUrl = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+
     const currentSubmit = ++submitCountRef.current;
     setIsScanning(true);
     setError('');
@@ -42,7 +46,7 @@ export function HeroSearch({ onUrlChange }: HeroSearchProps) {
       const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed }),
+        body: JSON.stringify({ url: normalizedUrl }),
       });
 
       if (currentSubmit !== submitCountRef.current) return;

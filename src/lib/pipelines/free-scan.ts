@@ -11,9 +11,9 @@ import { isBusinessMentioned } from "@/lib/engines/name-matcher";
 
 const FREE_SCAN_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity"];
 const CRAWL_TIMEOUT_MS = 8_000;
-const QUERY_GEN_TIMEOUT_MS = 3_000;
+const QUERY_GEN_TIMEOUT_MS = 10_000;
 const CITATION_TIMEOUT_MS = 12_000;
-const TOTAL_TIMEOUT_MS = 30_000;
+const TOTAL_TIMEOUT_MS = 45_000;
 
 // ─── Engine wrappers ────────────────────────────────────────────────────────
 

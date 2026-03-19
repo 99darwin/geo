@@ -2,14 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { rateLimit } from "@/lib/rate-limit";
 import { runFreeScan } from "@/lib/pipelines/free-scan";
+import { TimeoutError } from "@/lib/utils";
 import type { ApiResponse, ScanResult } from "@/types";
 
 const scanSchema = z.object({
-  url: z.url("Must be a valid URL"),
+  url: z.string().transform((val) => {
+    const trimmed = val.trim();
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+  }).pipe(z.url("Must be a valid URL")),
 });
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const checkRateLimit = rateLimit({ interval: ONE_HOUR_MS, limit: 5 });
+
+export const maxDuration = 60;
 
 export async function POST(
   request: NextRequest
@@ -29,8 +35,10 @@ export async function POST(
   }
 
   // Rate limit by IP
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "anonymous";
+  const ip =
+    request.headers.get("x-real-ip") ??
+    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+    "anonymous";
   const { success, remaining } = checkRateLimit(ip);
 
   if (!success) {
@@ -54,21 +62,21 @@ export async function POST(
       { headers: { "X-RateLimit-Remaining": String(remaining) } }
     );
   } catch (error) {
-    const isTimeout =
-      error instanceof Error &&
-      (error.name === "AbortError" || error.message.includes("abort"));
-
-    if (isTimeout) {
+    if (error instanceof TimeoutError) {
       return NextResponse.json(
         { error: "Scan timed out. Please try again." },
         { status: 504 }
       );
     }
 
-    console.error("[POST /api/scan] Pipeline error:", error);
-    return NextResponse.json(
-      { error: "An unexpected error occurred during the scan." },
-      { status: 500 }
-    );
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error("[POST /api/scan] Pipeline error:", errorMessage);
+
+    const userMessage = errorMessage.includes("is not configured")
+      ? "Service configuration error. Please contact support."
+      : "Scan failed. Please try again later.";
+
+    return NextResponse.json({ error: userMessage }, { status: 500 });
   }
 }

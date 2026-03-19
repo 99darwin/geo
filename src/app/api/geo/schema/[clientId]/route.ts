@@ -31,7 +31,8 @@ export async function GET(
     return new NextResponse(file.content, {
       status: 200,
       headers: {
-        "Content-Type": "application/javascript; charset=utf-8",
+        "Content-Type": "application/ld+json; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
         "Cache-Control": "public, max-age=3600",
       },
     });

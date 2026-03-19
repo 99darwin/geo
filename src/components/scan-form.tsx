@@ -30,11 +30,15 @@ export function ScanForm() {
 
     setIsLoading(true);
 
+    const normalizedUrl = /^https?:\/\//i.test(trimmed)
+      ? trimmed
+      : `https://${trimmed}`;
+
     try {
       const response = await fetch('/api/scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: trimmed }),
+        body: JSON.stringify({ url: normalizedUrl }),
       });
 
       const data = await response.json();
