@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { rateLimit } from "@/lib/rate-limit";
 import { runFreeScan } from "@/lib/pipelines/free-scan";
+import { TimeoutError } from "@/lib/utils";
 import type { ApiResponse, ScanResult } from "@/types";
 
 const scanSchema = z.object({
@@ -59,10 +60,7 @@ export async function POST(
       { headers: { "X-RateLimit-Remaining": String(remaining) } }
     );
   } catch (error) {
-    const isTimeout =
-      error instanceof Error && error.name === "AbortError";
-
-    if (isTimeout) {
+    if (error instanceof TimeoutError) {
       return NextResponse.json(
         { error: "Scan timed out. Please try again." },
         { status: 504 }
