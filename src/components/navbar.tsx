@@ -40,7 +40,7 @@ export function Navbar() {
                   Sign in
                 </Link>
                 <Link
-                  href="/login"
+                  href="/register"
                   className="inline-flex items-center rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
                 >
                   Sign up
