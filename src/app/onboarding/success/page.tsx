@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_DURATION_MS = 300000; // 5 minutes — pipeline can take a while
+const MAX_CONSECUTIVE_ERRORS = 5;
 
 export default function OnboardingSuccessPage() {
   const router = useRouter();
@@ -16,6 +17,7 @@ export default function OnboardingSuccessPage() {
   useEffect(() => {
     const start = Date.now();
     let cancelled = false;
+    let consecutiveErrors = 0;
 
     async function poll() {
       if (cancelled) return;
@@ -29,7 +31,14 @@ export default function OnboardingSuccessPage() {
           return;
         }
 
+        // Auth error — redirect to login
+        if (res.status === 401) {
+          router.push('/login?callbackUrl=/onboarding/success');
+          return;
+        }
+
         if (res.ok) {
+          consecutiveErrors = 0;
           const data = await res.json();
           const onboardingStatus = data.data?.client?.onboardingStatus;
 
@@ -44,9 +53,19 @@ export default function OnboardingSuccessPage() {
           } else if (onboardingStatus === 'setup_pending') {
             setStatus('pending');
           }
+        } else {
+          // Non-2xx, non-404, non-401 — count as error
+          consecutiveErrors++;
         }
       } catch {
-        // Network error — keep polling
+        // Network error — count toward threshold
+        consecutiveErrors++;
+      }
+
+      // Too many consecutive errors — show timeout/fallback
+      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+        setTimedOut(true);
+        return;
       }
 
       if (Date.now() - start > MAX_POLL_DURATION_MS) {

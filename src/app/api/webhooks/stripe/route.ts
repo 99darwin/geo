@@ -78,6 +78,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   if (existing) {
     console.log("[Stripe Webhook] Client already exists for customer:", customerId);
+    // Update subscription ID in case this is a resubscription after churn
+    // (handleSubscriptionDeleted sets stripeSubscriptionId to null)
+    if (subscriptionId && existing.stripeSubscriptionId !== subscriptionId) {
+      await prisma.client.update({
+        where: { id: existing.id },
+        data: { stripeSubscriptionId: subscriptionId },
+      });
+    }
     // If setup was interrupted (pending) or the pipeline process was killed (running),
     // re-dispatch. The atomic claim inside the pipeline prevents true duplicates.
     if (
@@ -89,31 +97,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  // Guard against multiple clients per user (e.g. two checkout sessions with different Stripe customers)
-  const existingByUser = await prisma.client.findFirst({
+  // Guard against multiple clients per user (e.g. two checkout sessions with different Stripe customers).
+  // Use upsert keyed on userId to atomically handle the race — if two concurrent webhooks both reach
+  // this point, the unique constraint on userId ensures only one creates and the other updates.
+  const client = await prisma.client.upsert({
     where: { userId },
-  });
-  if (existingByUser) {
-    console.warn("[Stripe Webhook] User already has a client record:", userId, existingByUser.id);
-    // Update with latest Stripe IDs rather than creating a duplicate
-    await prisma.client.update({
-      where: { id: existingByUser.id },
-      data: {
-        stripeCustomerId: customerId,
-        stripeSubscriptionId: subscriptionId,
-      },
-    });
-    if (
-      existingByUser.onboardingStatus === "setup_pending" ||
-      existingByUser.onboardingStatus === "setup_running"
-    ) {
-      dispatchSetupPipeline(existingByUser.id);
-    }
-    return;
-  }
-
-  const client = await prisma.client.create({
-    data: {
+    update: {
+      stripeCustomerId: customerId,
+      stripeSubscriptionId: subscriptionId,
+      plan: "starter",
+      onboardingStatus: "setup_pending",
+      websiteUrl,
+    },
+    create: {
       businessName: extractDomainName(websiteUrl),
       websiteUrl,
       city: "",
@@ -125,7 +121,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
   });
 
-  console.log("[Stripe Webhook] Client created:", client.id);
+  console.log("[Stripe Webhook] Client upserted:", client.id);
 
   // Dispatch setup pipeline asynchronously via waitUntil
   dispatchSetupPipeline(client.id);
