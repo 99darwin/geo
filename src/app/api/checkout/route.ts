@@ -36,7 +36,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     where: { userId: session.user.id },
     select: { plan: true, stripeCustomerId: true },
   });
-  if (existingClient?.plan !== "free_scan" && existingClient?.stripeCustomerId) {
+  if (existingClient && (existingClient.plan !== "free_scan" || existingClient.stripeCustomerId)) {
     return NextResponse.json(
       { error: "You already have an active subscription. Use the billing portal to manage it." },
       { status: 409 }
