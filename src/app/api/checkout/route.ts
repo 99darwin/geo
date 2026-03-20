@@ -9,8 +9,6 @@ const checkoutSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
 });
 
-// NOTE: In-memory rate limiter — best-effort only in serverless environments
-// since each instance gets its own Map. Replace with Redis/Upstash for production.
 const checkoutRateLimit = rateLimit({
   interval: 60 * 60 * 1000, // 1 hour
   limit: 5, // 5 checkout sessions per user per hour
@@ -22,7 +20,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { success } = checkoutRateLimit(session.user.id);
+  const { success } = await checkoutRateLimit(session.user.id);
   if (!success) {
     return NextResponse.json(
       { error: "Too many checkout attempts. Please try again later." },

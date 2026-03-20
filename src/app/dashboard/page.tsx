@@ -5,7 +5,23 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScoreGauge } from '@/components/ui/score-gauge';
+import { ScoreChart } from '@/components/ui/score-chart';
 import { DashboardScanForm } from '@/components/dashboard-scan-form';
+
+interface Recommendation {
+  id: string;
+  severity: 'critical' | 'important' | 'suggestion';
+  title: string;
+  description: string;
+  actionUrl?: string;
+}
+
+interface CompetitorData {
+  name: string;
+  domain: string | null;
+  citedCount: number;
+  platforms: string[];
+}
 
 interface DashboardData {
   client: {
@@ -37,6 +53,9 @@ interface DashboardData {
     llmsTxt: boolean;
     schemaJson: boolean;
   };
+  scoreHistory: { period: string; score: number }[];
+  recommendations: Recommendation[];
+  competitors: CompetitorData[];
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -93,7 +112,6 @@ export default function DashboardPage() {
     );
   }
 
-  // No client yet — show scan form for new users
   if (!data) {
     return (
       <div className="mx-auto max-w-4xl">
@@ -183,7 +201,7 @@ function FreeScanState({ websiteUrl }: { websiteUrl?: string }) {
 }
 
 function ActiveDashboard({ data }: { data: DashboardData }) {
-  const { client, visibilityScore, recentCitations, generatedFiles } = data;
+  const { client, visibilityScore, recentCitations, generatedFiles, scoreHistory, recommendations, competitors } = data;
   const citedPlatforms = new Set(
     recentCitations.filter((c) => c.cited).map((c) => c.platform)
   );
@@ -240,6 +258,41 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
           </p>
         </Card>
       </div>
+
+      {/* Score History Chart */}
+      {scoreHistory.length > 0 && (
+        <Card className="mt-6" title="Score History">
+          <ScoreChart data={scoreHistory} />
+        </Card>
+      )}
+
+      {/* Recommendations */}
+      {recommendations.length > 0 && (
+        <Card className="mt-6" title="Recommendations">
+          <div className="space-y-3">
+            {recommendations.map((rec) => (
+              <div
+                key={rec.id}
+                className="flex items-start gap-3 rounded-lg border border-gray-100 px-4 py-3"
+              >
+                <span
+                  className={`mt-0.5 h-2.5 w-2.5 shrink-0 rounded-full ${
+                    rec.severity === 'critical'
+                      ? 'bg-red-500'
+                      : rec.severity === 'important'
+                        ? 'bg-yellow-500'
+                        : 'bg-blue-400'
+                  }`}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{rec.title}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">{rec.description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Platform Status */}
       <Card className="mt-6" title="AI Platform Status">
@@ -340,7 +393,130 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
           </div>
         </div>
       </Card>
+
+      {/* File Implementation Instructions */}
+      {(generatedFiles.llmsTxt || generatedFiles.schemaJson) && (
+        <FileInstructions clientId={client.id} generatedFiles={generatedFiles} />
+      )}
+
+      {/* Competitors */}
+      {competitors.length > 0 && (
+        <Card className="mt-6" title="Competitor Visibility">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100 text-left text-gray-500">
+                  <th className="pb-3 font-medium">Competitor</th>
+                  <th className="pb-3 font-medium">Cited In</th>
+                  <th className="pb-3 font-medium">Platforms</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {competitors.map((comp) => (
+                  <tr key={comp.name}>
+                    <td className="py-3 pr-4 text-gray-900">{comp.name}</td>
+                    <td className="py-3 pr-4 text-gray-600">
+                      {comp.citedCount} {comp.citedCount === 1 ? 'query' : 'queries'}
+                    </td>
+                    <td className="py-3 text-gray-600">
+                      {comp.platforms
+                        .map((p) => PLATFORM_LABELS[p] ?? p)
+                        .join(', ') || '--'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </div>
+  );
+}
+
+function FileInstructions({
+  clientId,
+  generatedFiles,
+}: {
+  clientId: string;
+  generatedFiles: { llmsTxt: boolean; schemaJson: boolean };
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const appUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  const llmsTxtUrl = `${appUrl}/api/geo/llms/${clientId}/llms.txt`;
+  const schemaUrl = `${appUrl}/api/geo/schema/${clientId}`;
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <Card className="mt-6">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between text-left"
+      >
+        <span className="text-sm font-semibold text-gray-900">
+          How to Add These Files to Your Site
+        </span>
+        <span className="text-gray-400 text-sm">{expanded ? '−' : '+'}</span>
+      </button>
+
+      {expanded && (
+        <div className="mt-4 space-y-6">
+          {generatedFiles.llmsTxt && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-900">llms.txt</h4>
+              <p className="mt-1 text-xs text-gray-500">
+                Add a redirect or proxy at <code className="bg-gray-100 px-1 rounded">yourdomain.com/llms.txt</code> pointing to:
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded bg-gray-50 px-3 py-2 text-xs text-gray-700 border border-gray-200 truncate">
+                  {llmsTxtUrl}
+                </code>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => copyToClipboard(llmsTxtUrl, 'llms')}
+                >
+                  {copied === 'llms' ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-gray-400">
+                Or download the file and host it directly on your server.
+              </p>
+            </div>
+          )}
+
+          {generatedFiles.schemaJson && (
+            <div>
+              <h4 className="text-sm font-medium text-gray-900">JSON-LD Schema</h4>
+              <p className="mt-1 text-xs text-gray-500">
+                Add this script tag to the <code className="bg-gray-100 px-1 rounded">&lt;head&gt;</code> of your homepage:
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <code className="flex-1 rounded bg-gray-50 px-3 py-2 text-xs text-gray-700 border border-gray-200 truncate">
+                  {`<script src="${schemaUrl}"></script>`}
+                </code>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    copyToClipboard(`<script src="${schemaUrl}"></script>`, 'schema')
+                  }
+                >
+                  {copied === 'schema' ? 'Copied' : 'Copy'}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 

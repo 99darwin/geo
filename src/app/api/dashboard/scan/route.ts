@@ -47,7 +47,7 @@ export async function POST(
   }
 
   // Rate limit by user ID
-  const { success, remaining } = checkRateLimit(userId);
+  const { success, remaining } = await checkRateLimit(userId);
   if (!success) {
     return NextResponse.json(
       { error: "Rate limit exceeded. Try again later." },

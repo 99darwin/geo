@@ -1,0 +1,16 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/monthly-check",
+      "schedule": "0 6 1 * *"
+    },
+    {
+      "path": "/api/cron/monthly-report",
+      "schedule": "0 6 2 * *"
+    },
+    {
+      "path": "/api/cron/cleanup-reports",
+      "schedule": "0 0 * * 0"
+    }
+  ]
+}
