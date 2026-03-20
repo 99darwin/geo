@@ -80,12 +80,27 @@ export function generateVariations(businessName: string): string[] {
     .replace(/\bbros\b/g, "brothers");
   if (expanded !== lower) variations.add(expanded);
 
-  // Partial match: first two words (for longer names)
+  // Partial match: first and last words (for longer names)
   const words = lower.split(/\s+/);
   if (words.length > 2) {
     variations.add(words.slice(0, 2).join(" "));
     variations.add(words.slice(0, 2).join(" ").replace(/'s\b/g, "s"));
     variations.add(words.slice(0, 2).join(" ").replace(/'s\b/g, ""));
+    // Last two words and last word (brand names often appear at the end)
+    variations.add(words.slice(-2).join(" "));
+    variations.add(words[words.length - 1]);
+    variations.add(words[0]);
+  }
+
+  // Split on common title separators and add each segment
+  const separatorRegex = /\s*(?:[|–—:·]|\s-\s)\s*/;
+  if (separatorRegex.test(lower)) {
+    const segments = lower.split(separatorRegex).map((s) => s.trim()).filter((s) => s.length > 0);
+    for (const segment of segments) {
+      variations.add(segment);
+      variations.add(segment.replace(/'s\b/g, "s"));
+      variations.add(segment.replace(/'s\b/g, "").trim());
+    }
   }
 
   // Filter out empty strings
@@ -117,31 +132,33 @@ export function isBusinessMentioned(
   }
 
   // Second pass: Levenshtein distance on words/phrases in response
-  // Extract potential business name mentions (sequences of capitalized words in original response)
-  const words = response.split(/\s+/);
-  const primaryName = businessName.toLowerCase().trim();
+  // Check against each variation so short segments (e.g. "lululemon") get a matching window size
+  const responseWords = response.split(/\s+/);
 
-  for (let i = 0; i < words.length; i++) {
-    // Try matching phrases of similar word count to the business name
-    const nameWordCount = primaryName.split(/\s+/).length;
-    for (
-      let len = Math.max(1, nameWordCount - 1);
-      len <= nameWordCount + 1 && i + len <= words.length;
-      len++
-    ) {
-      const phrase = words
-        .slice(i, i + len)
-        .join(" ")
-        .toLowerCase()
-        .replace(/[,.:;!?]/g, "");
+  for (const variant of variations) {
+    if (variant.length < 3) continue;
+    const variantWordCount = variant.split(/\s+/).length;
 
-      if (
-        phrase.length >= 3 &&
-        levenshteinDistance(phrase, primaryName) < 3
+    for (let i = 0; i < responseWords.length; i++) {
+      for (
+        let len = Math.max(1, variantWordCount - 1);
+        len <= variantWordCount + 1 && i + len <= responseWords.length;
+        len++
       ) {
-        const beforeText = words.slice(0, i).join(" ").toLowerCase();
-        const position = (beforeText.match(/\d+\.\s/g) || []).length + 1;
-        return { cited: true, position: Math.min(position, 10) };
+        const phrase = responseWords
+          .slice(i, i + len)
+          .join(" ")
+          .toLowerCase()
+          .replace(/[,.:;!?]/g, "");
+
+        if (
+          phrase.length >= 3 &&
+          levenshteinDistance(phrase, variant) < 3
+        ) {
+          const beforeText = responseWords.slice(0, i).join(" ").toLowerCase();
+          const position = (beforeText.match(/\d+\.\s/g) || []).length + 1;
+          return { cited: true, position: Math.min(position, 10) };
+        }
       }
     }
   }
