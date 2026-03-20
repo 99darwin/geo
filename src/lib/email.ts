@@ -18,8 +18,10 @@ export async function sendEmail(params: {
   subject: string;
   react: React.ReactElement;
 }): Promise<{ id: string }> {
-  const fromAddress =
-    process.env.EMAIL_FROM || "GEO Reports <reports@yourdomain.com>";
+  const fromAddress = process.env.EMAIL_FROM;
+  if (!fromAddress) {
+    throw new Error("[email] EMAIL_FROM is not configured");
+  }
 
   const { data, error } = await getResend().emails.send({
     from: fromAddress,

@@ -71,10 +71,10 @@ async function handleMonthlyReport(
       }
     }
 
-    // Self-trigger next batch if we hit the limit
+    // Self-trigger next batch if raw query hit the limit (not deduplicated count)
     const nextCursor =
-      clientIds.length === BATCH_SIZE
-        ? clientIds[clientIds.length - 1]
+      clientsWithScores.length === BATCH_SIZE
+        ? clientsWithScores[clientsWithScores.length - 1].clientId
         : undefined;
 
     if (nextCursor) {

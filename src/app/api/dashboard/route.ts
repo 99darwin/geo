@@ -84,7 +84,7 @@ export async function GET(
       prisma.citation.findMany({
         where: { clientId: client.id },
         orderBy: { checkedAt: "desc" },
-        take: 20,
+        take: 200,
         include: { query: { select: { queryText: true } } },
       }),
       prisma.generatedFile.findMany({

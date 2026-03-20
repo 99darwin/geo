@@ -19,7 +19,7 @@ const ALL_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity", "gemini"];
 const VALID_PLANS = ["starter", "growth"];
 const VALID_STATUSES = ["setup_complete", "active"];
 
-const LOCK_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const LOCK_TTL_MS = 30 * 60 * 1000; // 30 minutes — must exceed max pipeline duration
 
 /** Acquire a Redis SETNX lock. Returns a release function, or null if lock not acquired. */
 async function acquireLock(key: string): Promise<(() => Promise<void>) | null> {
