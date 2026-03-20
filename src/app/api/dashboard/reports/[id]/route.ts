@@ -64,7 +64,7 @@ export async function GET(
 ): Promise<NextResponse<ApiResponse<ScanResult>>> {
   const { searchParams } = new URL(request.url);
   const clientId = searchParams.get("clientId");
-  if (!clientId) {
+  if (!clientId || !UUID_RE.test(clientId)) {
     return NextResponse.json({ error: "clientId is required" }, { status: 400 });
   }
 

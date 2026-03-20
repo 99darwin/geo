@@ -4,6 +4,8 @@ import { prisma } from "@/lib/db";
 import { generateRecommendations } from "@/lib/engines/recommendations";
 import type { ApiResponse, Recommendation } from "@/types";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 interface DashboardData {
   client: {
     id: string;
@@ -48,7 +50,7 @@ export async function GET(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<DashboardData>>> {
   const clientId = new URL(request.url).searchParams.get("clientId");
-  if (!clientId) {
+  if (!clientId || !UUID_RE.test(clientId)) {
     return NextResponse.json({ error: "clientId is required" }, { status: 400 });
   }
 

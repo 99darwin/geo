@@ -18,19 +18,19 @@ interface HistoryData {
   total: number;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<HistoryData>>> {
   const { searchParams } = new URL(request.url);
   const clientId = searchParams.get("clientId");
-  if (!clientId) {
+  if (!clientId || !UUID_RE.test(clientId)) {
     return NextResponse.json({ error: "clientId is required" }, { status: 400 });
   }
 
   const auth = await requireClientOwner(clientId);
   if (auth.error) return auth.error;
-
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const platform = searchParams.get("platform");
   const cursor = searchParams.get("cursor");
