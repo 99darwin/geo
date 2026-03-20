@@ -22,7 +22,10 @@ export async function POST(
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
-  if (!["setup_complete", "active"].includes(client.onboardingStatus)) {
+  if (
+    !["starter", "growth"].includes(client.plan ?? "") ||
+    !["setup_complete", "active"].includes(client.onboardingStatus)
+  ) {
     return NextResponse.json({ error: "Client not eligible for recheck" }, { status: 400 });
   }
 

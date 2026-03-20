@@ -10,6 +10,7 @@ import { checkNap } from "@/lib/engines/nap-checker";
 import { pullReviews } from "@/lib/engines/review-puller";
 import { detectCompetitors } from "@/lib/engines/competitor-detector";
 import { isBlockedUrl } from "@/lib/url-validation";
+import Redis from "ioredis";
 import type { AiPlatform } from "@/types/platforms";
 import type { MonthlyCheckResult } from "@/types";
 
@@ -17,6 +18,35 @@ const ALL_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity", "gemini"];
 
 const VALID_PLANS = ["starter", "growth"];
 const VALID_STATUSES = ["setup_complete", "active"];
+
+const LOCK_TTL_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Acquire a Redis SETNX lock. Returns a release function, or null if lock not acquired. */
+async function acquireLock(key: string): Promise<(() => Promise<void>) | null> {
+  const url = process.env.REDIS_URL;
+  if (!url) return async () => {}; // No Redis — no distributed lock, proceed anyway
+
+  let redis: Redis | null = null;
+  try {
+    redis = new Redis(url, { maxRetriesPerRequest: 1, lazyConnect: true });
+    await redis.connect();
+    const result = await redis.set(key, "1", "PX", LOCK_TTL_MS, "NX");
+    if (result !== "OK") {
+      await redis.disconnect();
+      return null; // Lock already held
+    }
+    const conn = redis;
+    return async () => {
+      await conn.del(key).catch(() => {});
+      await conn.disconnect();
+    };
+  } catch {
+    if (redis) {
+      try { redis.disconnect(); } catch { /* ignore */ }
+    }
+    return async () => {}; // Redis unavailable — proceed without lock
+  }
+}
 
 /**
  * Monthly check pipeline — re-checks visibility for an active subscriber.
@@ -42,6 +72,27 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   // Step 2: Compute period and check idempotency
   const now = new Date();
   const period = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Acquire distributed lock to prevent concurrent runs for the same client
+  const lockKey = `lock:monthly-check:${clientId}`;
+  const releaseLock = await acquireLock(lockKey);
+  if (releaseLock === null) {
+    console.log("[Monthly Check] Another run in progress for this client, skipping");
+    const existing = await prisma.visibilityScore.findFirst({
+      where: { clientId },
+      orderBy: { period: "desc" },
+    });
+    return {
+      clientId,
+      newScore: existing?.score ?? 0,
+      previousScore: null,
+      delta: 0,
+      filesRegenerated: false,
+      citationsChecked: 0,
+    };
+  }
+
+  try {
 
   const existingScore = await prisma.visibilityScore.findUnique({
     where: { clientId_period: { clientId, period } },
@@ -551,4 +602,8 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
     filesRegenerated,
     citationsChecked,
   };
+
+  } finally {
+    await releaseLock();
+  }
 }

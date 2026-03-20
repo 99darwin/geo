@@ -26,6 +26,7 @@ async function handleMonthlyCheck(
     ApiResponse<{
       processed: number;
       results: CheckResult[];
+      nextCursor?: string;
     }>
   >
 > {
@@ -44,11 +45,18 @@ async function handleMonthlyCheck(
   }
 
   try {
-    // Vercel cron sends GET with no body — process all eligible clients
+    // Support cursor from query params (self-trigger) or request body (manual POST)
+    const cursor =
+      request.nextUrl.searchParams.get("cursor") ??
+      (request.method === "POST"
+        ? await request.json().then((b) => b.cursor).catch(() => null)
+        : null);
+
     const clients = await prisma.client.findMany({
       where: {
         plan: { in: ["starter", "growth"] },
         onboardingStatus: { in: ["setup_complete", "active"] },
+        ...(cursor ? { id: { gt: cursor } } : {}),
       },
       orderBy: { id: "asc" },
       take: BATCH_SIZE,
@@ -74,8 +82,37 @@ async function handleMonthlyCheck(
       }
     }
 
+    // Self-trigger next batch if we hit the limit
+    const nextCursor =
+      clients.length === BATCH_SIZE
+        ? clients[clients.length - 1].id
+        : undefined;
+
+    if (nextCursor) {
+      console.log(
+        `[cron/monthly-check] Batch limit reached, triggering next page from cursor ${nextCursor}`
+      );
+      try {
+        const { waitUntil } = await import("@vercel/functions");
+        const selfUrl = new URL(request.url);
+        selfUrl.searchParams.set("cursor", nextCursor);
+        waitUntil(
+          fetch(selfUrl.toString(), {
+            method: "GET",
+            headers: { authorization: `Bearer ${cronSecret}` },
+          }).catch((err) =>
+            console.error("[cron/monthly-check] Self-trigger failed:", err)
+          )
+        );
+      } catch {
+        console.warn(
+          "[cron/monthly-check] waitUntil unavailable; remaining clients will be processed next cron run"
+        );
+      }
+    }
+
     return NextResponse.json({
-      data: { processed: results.length, results },
+      data: { processed: results.length, results, nextCursor },
     });
   } catch (error) {
     console.error("[cron/monthly-check]", error);
