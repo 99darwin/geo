@@ -52,13 +52,17 @@ export function DashboardScanForm() {
         return;
       }
 
-      // Store result and navigate to detailed results view
-      sessionStorage.setItem('scanResult', JSON.stringify(data.data));
-      sessionStorage.setItem(
-        'scanPersisted',
-        data.persisted !== undefined ? String(data.persisted) : 'false'
-      );
-      router.push(`/scan?url=${encodeURIComponent(normalizedUrl)}`);
+      // Navigate to the persisted report if available, otherwise fall back to session storage
+      if (data.reportId) {
+        router.push(`/dashboard/reports/${data.reportId}`);
+      } else {
+        sessionStorage.setItem('scanResult', JSON.stringify(data.data));
+        sessionStorage.setItem(
+          'scanPersisted',
+          data.persisted !== undefined ? String(data.persisted) : 'false'
+        );
+        router.push(`/scan?url=${encodeURIComponent(normalizedUrl)}`);
+      }
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {

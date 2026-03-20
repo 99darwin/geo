@@ -137,6 +137,7 @@ model Client {
   generatedFiles     GeneratedFile[]
   industrySources    IndustrySource[]
   adminNotes         AdminNote[]
+  scanReports        ScanReport[]
 }
 
 model Query {
@@ -308,4 +309,18 @@ model SharedReport {
   expiresAt DateTime
 
   @@index([expiresAt])
+}
+
+model ScanReport {
+  id        String   @id @default(uuid())
+  clientId  String
+  url       String
+  score     Int
+  data      Json
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@index([clientId, createdAt])
 }
