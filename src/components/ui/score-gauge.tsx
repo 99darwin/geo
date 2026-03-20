@@ -86,6 +86,7 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
       {/* Score text overlaid in center */}
       <div
         className="absolute inset-0 flex flex-col items-center justify-center"
+        aria-hidden="true"
       >
         <span className="font-bold text-gray-900" style={{ fontSize: size * 0.225 }}>
           {animatedScore}

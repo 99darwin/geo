@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
@@ -40,6 +40,15 @@ export function DashboardShell({ userName, children }: DashboardShellProps) {
   const pathname = usePathname();
   const clientId = extractClientId(pathname);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isMobileMenuOpen) return;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setIsMobileMenuOpen(false);
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isMobileMenuOpen]);
 
   const navItems = clientId
     ? [...getClientNavItems(clientId), { href: '/dashboard/settings', label: 'Settings' }]
@@ -153,6 +162,7 @@ export function DashboardShell({ userName, children }: DashboardShellProps) {
           {isMobileMenuOpen && (
             <nav
               id="mobile-menu"
+              aria-label="Mobile navigation"
               className="absolute right-0 top-16 z-40 w-56 rounded-bl-lg border-b border-l border-gray-200 bg-white py-2 shadow-lg md:hidden"
             >
               {clientId && (
