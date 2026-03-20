@@ -42,6 +42,8 @@ export async function GET(
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 20, 1), 50);
 
   try {
+    // Current model: one client per user (userId has unique constraint).
+    // findFirst + orderBy kept for safety if constraint is ever relaxed.
     const client = await prisma.client.findFirst({
       where: { userId },
       orderBy: { createdAt: "desc" },
@@ -68,7 +70,7 @@ export async function GET(
 
     const reports = await prisma.scanReport.findMany({
       where: { clientId: client.id },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: { id: true, url: true, score: true, createdAt: true },

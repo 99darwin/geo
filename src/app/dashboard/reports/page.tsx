@@ -16,6 +16,7 @@ interface ReportItem {
 export default function ReportsPage() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
 
@@ -24,10 +25,17 @@ export default function ReportsPage() {
 
     fetch('/api/dashboard/reports')
       .then(async (res) => {
-        if (cancelled || !res.ok) return;
+        if (cancelled) return;
+        if (!res.ok) {
+          setError('Failed to load reports. Please refresh and try again.');
+          return;
+        }
         const json = await res.json();
         setReports(json.data.reports);
         setNextCursor(json.data.nextCursor);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Network error. Please check your connection.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -58,7 +66,9 @@ export default function ReportsPage() {
       <p className="mt-1 text-gray-500">All your past AI visibility scans.</p>
 
       <Card className="mt-6">
-        {loading ? (
+        {error ? (
+          <p className="py-8 text-center text-red-600">{error}</p>
+        ) : loading ? (
           <div className="animate-pulse space-y-4">
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-16 rounded bg-gray-100" />
@@ -83,7 +93,7 @@ export default function ReportsPage() {
                       {r.url}
                     </p>
                     <p className="text-xs text-gray-400">
-                      {new Date(r.createdAt).toLocaleDateString(undefined, {
+                      {new Date(r.createdAt).toLocaleString(undefined, {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric',

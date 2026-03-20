@@ -83,6 +83,8 @@ export async function GET(
   }
 
   try {
+    // Current model: one client per user (userId has unique constraint).
+    // findFirst + orderBy kept for safety if constraint is ever relaxed.
     const client = await prisma.client.findFirst({
       where: { userId },
       orderBy: { createdAt: "desc" },
