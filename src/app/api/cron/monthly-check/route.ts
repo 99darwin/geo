@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { runMonthlyCheck } from "@/lib/pipelines/monthly-check";
 import type { ApiResponse } from "@/types";
 
-const BATCH_SIZE = 5;
+const BATCH_SIZE = 50;
 
 interface CheckResult {
   clientId: string;
@@ -26,7 +26,6 @@ async function handleMonthlyCheck(
     ApiResponse<{
       processed: number;
       results: CheckResult[];
-      nextCursor: string | null;
     }>
   >
 > {
@@ -45,9 +44,7 @@ async function handleMonthlyCheck(
   }
 
   try {
-    const body = await request.json().catch(() => ({}));
-    const cursor: string | null = body.cursor || null;
-
+    // Vercel cron sends GET with no body — process all eligible clients
     const clients = await prisma.client.findMany({
       where: {
         plan: { in: ["starter", "growth"] },
@@ -55,7 +52,6 @@ async function handleMonthlyCheck(
       },
       orderBy: { id: "asc" },
       take: BATCH_SIZE,
-      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: { id: true },
     });
 
@@ -78,13 +74,8 @@ async function handleMonthlyCheck(
       }
     }
 
-    const nextCursor =
-      clients.length === BATCH_SIZE
-        ? clients[clients.length - 1].id
-        : null;
-
     return NextResponse.json({
-      data: { processed: results.length, results, nextCursor },
+      data: { processed: results.length, results },
     });
   } catch (error) {
     console.error("[cron/monthly-check]", error);

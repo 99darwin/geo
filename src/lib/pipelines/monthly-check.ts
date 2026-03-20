@@ -340,12 +340,21 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
         });
       }
 
-      // Store competitor citations for each (query, platform) pair
+      // Store competitor citations — skip duplicates for same (competitor, query, platform)
       for (const queryText of comp.citedInQueries) {
         const queryRecord = queryRecords.find((q) => q.queryText === queryText);
         if (!queryRecord) continue;
 
         for (const platform of comp.platforms) {
+          const existing = await prisma.competitorCitation.findFirst({
+            where: {
+              competitorId: competitor.id,
+              queryId: queryRecord.id,
+              platform: platform as AiPlatform,
+            },
+          });
+          if (existing) continue;
+
           await prisma.competitorCitation.create({
             data: {
               competitorId: competitor.id,

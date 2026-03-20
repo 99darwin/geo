@@ -42,7 +42,7 @@ export async function GET(
     escapeCsv(c.businessName),
     escapeCsv(c.websiteUrl),
     escapeCsv(c.city),
-    c.state ?? "",
+    c.state ? escapeCsv(c.state) : "",
     c.plan,
     c.onboardingStatus,
     c.visibilityScores[0]?.score?.toString() ?? "",

@@ -33,6 +33,7 @@ function getRedis(): Redis | null {
   });
 
   redis.connect().catch(() => {
+    redis?.disconnect();
     redis = null;
   });
 

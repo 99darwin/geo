@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { runMonthlyReport } from "@/lib/pipelines/monthly-report";
 import type { ApiResponse } from "@/types";
 
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 100;
 
 function verifyCronSecret(authHeader: string | null, secret: string): boolean {
   const expected = `Bearer ${secret}`;
@@ -19,7 +19,6 @@ async function handleMonthlyReport(
     ApiResponse<{
       sent: number;
       failed: number;
-      nextCursor: string | null;
     }>
   >
 > {
@@ -38,9 +37,7 @@ async function handleMonthlyReport(
   }
 
   try {
-    const body = await request.json().catch(() => ({}));
-    const cursor: string | null = body.cursor || null;
-
+    // Vercel cron sends GET with no body — process all clients with scores for this period
     const now = new Date();
     const period = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -49,14 +46,6 @@ async function handleMonthlyReport(
       select: { clientId: true },
       orderBy: { clientId: "asc" },
       take: BATCH_SIZE,
-      ...(cursor
-        ? {
-            cursor: {
-              clientId_period: { clientId: cursor, period },
-            },
-            skip: 1,
-          }
-        : {}),
     });
 
     const clientIds = [...new Set(clientsWithScores.map((s) => s.clientId))];
@@ -74,13 +63,8 @@ async function handleMonthlyReport(
       }
     }
 
-    const nextCursor =
-      clientsWithScores.length === BATCH_SIZE
-        ? clientsWithScores[clientsWithScores.length - 1].clientId
-        : null;
-
     return NextResponse.json({
-      data: { sent, failed, nextCursor },
+      data: { sent, failed },
     });
   } catch (error) {
     console.error("[cron/monthly-report]", error);
