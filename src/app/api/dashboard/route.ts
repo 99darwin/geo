@@ -100,6 +100,9 @@ export async function GET(
       prisma.competitor.findMany({
         where: { clientId: client.id },
         take: 5,
+        orderBy: {
+          competitorCitations: { _count: "desc" },
+        },
         include: {
           competitorCitations: {
             where: { cited: true },
