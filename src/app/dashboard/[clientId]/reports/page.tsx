@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,8 @@ interface ReportItem {
   createdAt: string;
 }
 
-export default function ReportsPage() {
+export default function ClientReportsPage() {
+  const { clientId } = useParams<{ clientId: string }>();
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -21,9 +23,10 @@ export default function ReportsPage() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
+    if (!clientId) return;
     let cancelled = false;
 
-    fetch('/api/dashboard/reports')
+    fetch(`/api/dashboard/reports?clientId=${clientId}`)
       .then(async (res) => {
         if (cancelled) return;
         if (!res.ok) {
@@ -42,14 +45,14 @@ export default function ReportsPage() {
       });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [clientId]);
 
   async function loadMore() {
-    if (!nextCursor) return;
+    if (!nextCursor || !clientId) return;
     setLoadingMore(true);
 
     try {
-      const res = await fetch(`/api/dashboard/reports?cursor=${nextCursor}`);
+      const res = await fetch(`/api/dashboard/reports?clientId=${clientId}&cursor=${nextCursor}`);
       if (res.ok) {
         const json = await res.json();
         setReports((prev) => [...prev, ...json.data.reports]);
@@ -62,8 +65,15 @@ export default function ReportsPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <Link
+        href={`/dashboard/${clientId}`}
+        className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
+      >
+        &larr; Back to Overview
+      </Link>
+
       <h1 className="text-2xl font-bold text-gray-900">Scan Reports</h1>
-      <p className="mt-1 text-gray-500">All your past AI visibility scans.</p>
+      <p className="mt-1 text-gray-500">All past AI visibility scans for this business.</p>
 
       <Card className="mt-6">
         {error ? (
@@ -76,7 +86,7 @@ export default function ReportsPage() {
           </div>
         ) : reports.length === 0 ? (
           <p className="py-8 text-center text-gray-500">
-            No scan reports yet. Run a scan to get started.
+            No scan reports yet.
           </p>
         ) : (
           <>
@@ -84,7 +94,7 @@ export default function ReportsPage() {
               {reports.map((r) => (
                 <Link
                   key={r.id}
-                  href={`/dashboard/reports/${r.id}`}
+                  href={`/dashboard/${clientId}/reports/${r.id}`}
                   className="flex items-center gap-4 py-4 px-2 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   <ScoreGauge score={r.score} size={48} />

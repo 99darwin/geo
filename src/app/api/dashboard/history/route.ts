@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireClientOwner } from "@/lib/auth-utils";
 import { prisma } from "@/lib/db";
 import type { ApiResponse } from "@/types";
 
@@ -21,26 +21,37 @@ interface HistoryData {
 export async function GET(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<HistoryData>>> {
-  const auth = await requireAuth();
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get("clientId");
+  if (!clientId) {
+    return NextResponse.json({ error: "clientId is required" }, { status: 400 });
+  }
+
+  const auth = await requireClientOwner(clientId);
   if (auth.error) return auth.error;
 
-  const { searchParams } = new URL(request.url);
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
   const platform = searchParams.get("platform");
   const cursor = searchParams.get("cursor");
-  const limit = Math.min(Number(searchParams.get("limit")) || 20, 50);
+  const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 20, 1), 50);
+
+  // Validate cursor format and ownership
+  if (cursor) {
+    if (!UUID_RE.test(cursor)) {
+      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+    }
+    const cursorCitation = await prisma.citation.findUnique({
+      where: { id: cursor },
+      select: { clientId: true },
+    });
+    if (!cursorCitation || cursorCitation.clientId !== clientId) {
+      return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+    }
+  }
 
   try {
-    const client = await prisma.client.findFirst({
-      where: { userId: auth.session.user.id },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    });
-
-    if (!client) {
-      return NextResponse.json({ error: "No client found" }, { status: 404 });
-    }
-
-    const where: Record<string, unknown> = { clientId: client.id };
+    const where: Record<string, unknown> = { clientId };
     if (platform) where.platform = platform;
 
     const total = await prisma.citation.count({ where });

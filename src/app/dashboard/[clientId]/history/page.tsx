@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 
@@ -23,7 +25,8 @@ const PLATFORM_LABELS: Record<string, string> = {
 
 const PLATFORMS = ['', 'chatgpt', 'perplexity', 'google_ai', 'gemini', 'copilot'];
 
-export default function HistoryPage() {
+export default function ClientHistoryPage() {
+  const { clientId } = useParams<{ clientId: string }>();
   const [citations, setCitations] = useState<Citation[]>([]);
   const [loading, setLoading] = useState(true);
   const [platform, setPlatform] = useState('');
@@ -32,10 +35,12 @@ export default function HistoryPage() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
+    if (!clientId) return;
     let cancelled = false;
     setLoading(true);
 
     const params = new URLSearchParams();
+    params.set('clientId', clientId);
     if (platform) params.set('platform', platform);
 
     fetch(`/api/dashboard/history?${params}`)
@@ -52,13 +57,14 @@ export default function HistoryPage() {
       });
 
     return () => { cancelled = true; };
-  }, [platform]);
+  }, [clientId, platform]);
 
   async function loadMore() {
-    if (!nextCursor) return;
+    if (!nextCursor || !clientId) return;
     setLoadingMore(true);
 
     const params = new URLSearchParams();
+    params.set('clientId', clientId);
     if (platform) params.set('platform', platform);
     params.set('cursor', nextCursor);
 
@@ -77,6 +83,13 @@ export default function HistoryPage() {
 
   return (
     <div className="mx-auto max-w-4xl">
+      <Link
+        href={`/dashboard/${clientId}`}
+        className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
+      >
+        &larr; Back to Overview
+      </Link>
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Citation History</h1>
