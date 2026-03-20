@@ -7,19 +7,6 @@ import { Input } from '@/components/ui/input';
 
 interface SettingsData {
   user: { name: string | null; email: string | null };
-  client: {
-    id: string;
-    businessName: string;
-    websiteUrl: string;
-    city: string;
-    state: string | null;
-    phone: string | null;
-    address: string | null;
-    category: string | null;
-    services: string[];
-    hours: string | null;
-    googleBusinessUrl: string | null;
-  } | null;
 }
 
 export default function SettingsPage() {
@@ -34,17 +21,6 @@ export default function SettingsPage() {
   const [accountError, setAccountError] = useState('');
   const [accountLoading, setAccountLoading] = useState(false);
 
-  // Business form
-  const [businessName, setBusinessName] = useState('');
-  const [websiteUrl, setWebsiteUrl] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
-  const [phone, setPhone] = useState('');
-  const [category, setCategory] = useState('');
-  const [businessMessage, setBusinessMessage] = useState('');
-  const [businessError, setBusinessError] = useState('');
-  const [businessLoading, setBusinessLoading] = useState(false);
-
   useEffect(() => {
     fetch('/api/dashboard/settings')
       .then(async (res) => {
@@ -53,14 +29,6 @@ export default function SettingsPage() {
         const d = json.data as SettingsData;
         setData(d);
         setName(d.user.name ?? '');
-        if (d.client) {
-          setBusinessName(d.client.businessName);
-          setWebsiteUrl(d.client.websiteUrl);
-          setCity(d.client.city);
-          setState(d.client.state ?? '');
-          setPhone(d.client.phone ?? '');
-          setCategory(d.client.category ?? '');
-        }
       })
       .finally(() => setLoading(false));
   }, []);
@@ -106,45 +74,10 @@ export default function SettingsPage() {
     }
   }
 
-  async function handleBusinessSubmit(e: FormEvent) {
-    e.preventDefault();
-    setBusinessMessage('');
-    setBusinessError('');
-    setBusinessLoading(true);
-
-    try {
-      const res = await fetch('/api/dashboard/client', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          businessName,
-          websiteUrl,
-          city,
-          state: state || undefined,
-          phone: phone || undefined,
-          category: category || undefined,
-        }),
-      });
-
-      const json = await res.json();
-      if (!res.ok) {
-        setBusinessError(json.error || 'Failed to update.');
-        return;
-      }
-
-      setBusinessMessage('Business details updated.');
-    } catch {
-      setBusinessError('Something went wrong.');
-    } finally {
-      setBusinessLoading(false);
-    }
-  }
-
   if (loading) {
     return (
       <div className="mx-auto max-w-2xl animate-pulse space-y-6">
         <div className="h-8 w-32 rounded bg-gray-200" />
-        <div className="h-64 rounded-lg bg-gray-200" />
         <div className="h-64 rounded-lg bg-gray-200" />
       </div>
     );
@@ -153,6 +86,9 @@ export default function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+      <p className="mt-1 text-gray-500">
+        Manage your account. To edit business details, go to the business dashboard.
+      </p>
 
       {/* Account Settings */}
       <Card className="mt-6" title="Account">
@@ -195,59 +131,6 @@ export default function SettingsPage() {
           </Button>
         </form>
       </Card>
-
-      {/* Business Settings */}
-      {data?.client && (
-        <Card className="mt-6" title="Business Details">
-          <form onSubmit={handleBusinessSubmit} className="space-y-4">
-            <Input
-              label="Business Name"
-              value={businessName}
-              onChange={(e) => setBusinessName(e.target.value)}
-              disabled={businessLoading}
-            />
-            <Input
-              label="Website"
-              type="url"
-              value={websiteUrl}
-              onChange={(e) => setWebsiteUrl(e.target.value)}
-              disabled={businessLoading}
-            />
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="City"
-                value={city}
-                onChange={(e) => setCity(e.target.value)}
-                disabled={businessLoading}
-              />
-              <Input
-                label="State"
-                value={state}
-                onChange={(e) => setState(e.target.value)}
-                disabled={businessLoading}
-              />
-            </div>
-            <Input
-              label="Phone"
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              disabled={businessLoading}
-            />
-            <Input
-              label="Category"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              disabled={businessLoading}
-            />
-            {businessError && <p className="text-sm text-red-600">{businessError}</p>}
-            {businessMessage && <p className="text-sm text-green-600">{businessMessage}</p>}
-            <Button type="submit" isLoading={businessLoading}>
-              Save Business Details
-            </Button>
-          </form>
-        </Card>
-      )}
     </div>
   );
 }

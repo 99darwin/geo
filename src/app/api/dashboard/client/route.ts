@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireClientOwner } from "@/lib/auth-utils";
 import { prisma } from "@/lib/db";
 import type { ApiResponse } from "@/types";
 
 const clientUpdateSchema = z.object({
+  clientId: z.string().uuid(),
   businessName: z.string().min(1).optional(),
   websiteUrl: z.url().optional(),
   city: z.string().min(1).optional(),
@@ -20,9 +21,6 @@ const clientUpdateSchema = z.object({
 export async function PATCH(
   request: NextRequest
 ): Promise<NextResponse<ApiResponse<{ success: boolean }>>> {
-  const auth = await requireAuth();
-  if (auth.error) return auth.error;
-
   let body: unknown;
   try {
     body = await request.json();
@@ -36,20 +34,15 @@ export async function PATCH(
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
+  const { clientId, ...updateData } = parsed.data;
+
+  const auth = await requireClientOwner(clientId);
+  if (auth.error) return auth.error;
+
   try {
-    const client = await prisma.client.findFirst({
-      where: { userId: auth.session.user.id },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    });
-
-    if (!client) {
-      return NextResponse.json({ error: "No client found" }, { status: 404 });
-    }
-
     await prisma.client.update({
-      where: { id: client.id },
-      data: parsed.data,
+      where: { id: clientId },
+      data: updateData,
     });
 
     return NextResponse.json({ data: { success: true } });

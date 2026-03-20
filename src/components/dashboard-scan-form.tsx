@@ -53,8 +53,8 @@ export function DashboardScanForm() {
       }
 
       // Navigate to the persisted report if available, otherwise fall back to session storage
-      if (data.reportId) {
-        router.push(`/dashboard/reports/${data.reportId}`);
+      if (data.reportId && data.clientId) {
+        router.push(`/dashboard/${data.clientId}/reports/${data.reportId}`);
       } else {
         sessionStorage.setItem('scanResult', JSON.stringify(data.data));
         sessionStorage.setItem(
