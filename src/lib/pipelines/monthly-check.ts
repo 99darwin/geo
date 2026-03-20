@@ -389,18 +389,32 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   }
 
   await Promise.all(
-    Array.from(sourceMap.values()).map((source) =>
-      prisma.industrySource.create({
-        data: {
-          clientId,
-          domain: source.domain,
-          url: source.url ?? null,
-          citationCount: source.count,
-          platformsCiting: Array.from(source.platforms),
-          period,
-        },
-      })
-    )
+    Array.from(sourceMap.values()).map(async (source) => {
+      const existing = await prisma.industrySource.findFirst({
+        where: { clientId, domain: source.domain, period },
+      });
+      if (existing) {
+        await prisma.industrySource.update({
+          where: { id: existing.id },
+          data: {
+            citationCount: source.count,
+            platformsCiting: Array.from(source.platforms),
+            url: source.url ?? existing.url,
+          },
+        });
+      } else {
+        await prisma.industrySource.create({
+          data: {
+            clientId,
+            domain: source.domain,
+            url: source.url ?? null,
+            citationCount: source.count,
+            platformsCiting: Array.from(source.platforms),
+            period,
+          },
+        });
+      }
+    })
   );
 
   // Step 12: Compute visibility score

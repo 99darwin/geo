@@ -3,7 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { generateRecommendations } from "@/lib/engines/recommendations";
-import { auditRobotsTxt } from "@/lib/engines/robots-auditor";
 import type { ApiResponse, Recommendation } from "@/types";
 
 interface DashboardData {
@@ -131,13 +130,15 @@ export async function GET(
       ...new Set(recentCitations.filter((c) => c.cited).map((c) => c.platform)),
     ];
 
-    // Get robots.txt audit (cached via short timeout, non-blocking)
-    let robotsAudit: { accessible: boolean; blocked: string[]; total: number; status: string } = { accessible: true, blocked: [], total: 5, status: "clean" };
-    try {
-      robotsAudit = await auditRobotsTxt(client.websiteUrl);
-    } catch {
-      // Non-critical — use defaults
-    }
+    // Read robots.txt status from latest score breakdown (set during monthly check)
+    const breakdown = (latestScore?.breakdown as Record<string, unknown>) ?? {};
+    const hasCleanRobotsTxt = breakdown.hasCleanRobotsTxt !== false;
+    const robotsAudit = {
+      accessible: true,
+      blocked: hasCleanRobotsTxt ? [] : ["unknown"],
+      total: 5,
+      status: hasCleanRobotsTxt ? "clean" : "blocked",
+    };
 
     const recommendations = generateRecommendations({
       robotsAudit,
