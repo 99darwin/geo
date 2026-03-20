@@ -1,0 +1,3 @@
+ALTER TABLE "Client"
+  ADD COLUMN "lastRecheckAt" TIMESTAMPTZ,
+  ADD COLUMN "lastRegenerateAt" TIMESTAMPTZ;

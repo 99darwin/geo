@@ -123,7 +123,9 @@ model Client {
   plan                  Plan             @default(free_scan)
   stripeCustomerId      String?          @unique
   stripeSubscriptionId  String?          @unique
-  userId                String
+  userId                String           @unique
+  lastRecheckAt         DateTime?
+  lastRegenerateAt      DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 

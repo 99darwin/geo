@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PLAN_LABELS, STATUS_LABELS } from '@/lib/admin-constants';
 
 interface ClientItem {
   id: string;
@@ -16,19 +17,6 @@ interface ClientItem {
   createdAt: string;
 }
 
-const PLAN_LABELS: Record<string, string> = {
-  free_scan: 'Free',
-  starter: 'Starter',
-  growth: 'Growth',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  scan_complete: 'Scan Complete',
-  setup_pending: 'Setup Pending',
-  setup_complete: 'Setup Complete',
-  active: 'Active',
-};
-
 export default function AdminClientsPage() {
   const [clients, setClients] = useState<ClientItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -37,37 +25,58 @@ export default function AdminClientsPage() {
   const [plan, setPlan] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
-  const prevFilters = useRef({ search, plan, status });
+  const [error, setError] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [retryCount, setRetryCount] = useState(0);
+  const prevFilters = useRef({ search: debouncedSearch, plan, status });
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     // Reset page to 1 when filters change
     const filtersChanged =
-      prevFilters.current.search !== search ||
+      prevFilters.current.search !== debouncedSearch ||
       prevFilters.current.plan !== plan ||
       prevFilters.current.status !== status;
-    prevFilters.current = { search, plan, status };
+    prevFilters.current = { search: debouncedSearch, plan, status };
     const currentPage = filtersChanged ? 1 : page;
 
     let cancelled = false;
 
     const params = new URLSearchParams();
     params.set('page', String(currentPage));
-    if (search) params.set('search', search);
+    if (debouncedSearch) params.set('search', debouncedSearch);
     if (plan) params.set('plan', plan);
     if (status) params.set('status', status);
 
     void (async () => {
-      const res = await fetch(`/api/admin/clients?${params}`);
-      if (cancelled || !res.ok) return;
-      const json = await res.json();
-      setClients(json.data.clients);
-      setTotal(json.data.total);
-      setLoading(false);
-      if (filtersChanged) setPage(1);
+      try {
+        const res = await fetch(`/api/admin/clients?${params}`);
+        if (cancelled) return;
+        if (!res.ok) {
+          setError(true);
+          setLoading(false);
+          return;
+        }
+        const json = await res.json();
+        setClients(json.data.clients);
+        setTotal(json.data.total);
+        setError(false);
+        setLoading(false);
+        if (filtersChanged) setPage(1);
+      } catch {
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
+      }
     })();
 
     return () => { cancelled = true; };
-  }, [page, search, plan, status]);
+  }, [page, debouncedSearch, plan, status, retryCount]);
 
   const totalPages = Math.ceil(total / 20);
 
@@ -83,11 +92,13 @@ export default function AdminClientsPage() {
           placeholder="Search by name..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search clients by name"
           className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 w-64"
         />
         <select
           value={plan}
           onChange={(e) => setPlan(e.target.value)}
+          aria-label="Filter by plan"
           className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
         >
           <option value="">All plans</option>
@@ -98,6 +109,7 @@ export default function AdminClientsPage() {
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
+          aria-label="Filter by status"
           className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
         >
           <option value="">All statuses</option>
@@ -108,7 +120,27 @@ export default function AdminClientsPage() {
         </select>
       </div>
 
-      <Card className="mt-4">
+      {error && (
+        <Card className="mt-4">
+          <div className="flex flex-col items-center justify-center py-12">
+            <p className="text-gray-500">Failed to load clients.</p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-4"
+              onClick={() => {
+                setError(false);
+                setLoading(true);
+                setRetryCount((c) => c + 1);
+              }}
+            >
+              Retry
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {!error && <Card className="mt-4">
         {loading ? (
           <div className="animate-pulse space-y-4">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -190,7 +222,7 @@ export default function AdminClientsPage() {
             )}
           </>
         )}
-      </Card>
+      </Card>}
     </div>
   );
 }

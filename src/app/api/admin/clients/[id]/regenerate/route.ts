@@ -7,6 +7,8 @@ import { generateSchemaScript } from "@/lib/engines/generators/schema-jsonld";
 import { isBlockedUrl } from "@/lib/url-validation";
 import type { ApiResponse } from "@/types";
 
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per client
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,8 +23,32 @@ export async function POST(
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
+  // Check blocked URL before consuming cooldown
   if (isBlockedUrl(client.websiteUrl)) {
     return NextResponse.json({ error: "Blocked URL" }, { status: 400 });
+  }
+
+  // Atomic cooldown: only update if expired or never set
+  const cooldownThreshold = new Date(Date.now() - COOLDOWN_MS);
+  const updated = await prisma.client.updateMany({
+    where: {
+      id,
+      OR: [
+        { lastRegenerateAt: null },
+        { lastRegenerateAt: { lt: cooldownThreshold } },
+      ],
+    },
+    data: { lastRegenerateAt: new Date() },
+  });
+
+  if (updated.count === 0) {
+    const waitSec = client.lastRegenerateAt
+      ? Math.max(0, Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRegenerateAt.getTime())) / 1000))
+      : 0;
+    return NextResponse.json(
+      { error: `Please wait ${waitSec}s before triggering again.` },
+      { status: 429 }
+    );
   }
 
   const promise = (async () => {

@@ -57,11 +57,15 @@ export async function GET(
     headers: {
       "Content-Type": "text/csv",
       "Content-Disposition": `attachment; filename="clients-export-${date}.csv"`,
+      "Cache-Control": "private, no-store",
     },
   });
 }
 
 function escapeCsv(value: string): string {
+  if (/^[=+\-@\t\r]/.test(value)) {
+    value = "'" + value;
+  }
   if (value.includes(",") || value.includes('"') || value.includes("\n")) {
     return `"${value.replace(/"/g, '""')}"`;
   }

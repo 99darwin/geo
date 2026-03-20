@@ -71,7 +71,9 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ data: client });
+    return NextResponse.json({ data: client }, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
   } catch (error) {
     console.error("[GET /api/admin/clients/[id]]", error);
     return NextResponse.json(

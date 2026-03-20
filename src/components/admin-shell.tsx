@@ -58,6 +58,13 @@ export function AdminShell({ userName, children }: AdminShellProps) {
           </nav>
 
           <div className="px-4 py-4 border-t border-gray-800">
+            <a
+              href="/api/admin/export"
+              download
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+            >
+              Export CSV
+            </a>
             <Link
               href="/dashboard"
               className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
