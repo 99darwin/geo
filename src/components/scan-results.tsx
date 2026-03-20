@@ -215,7 +215,7 @@ function BreakdownRow({
   value: number;
   weight: number;
 }) {
-  const percentage = Math.round(value * 100);
+  const percentage = Math.min(Math.round(value * 100), 100);
   const contribution = Math.round(value * weight);
 
   return (
