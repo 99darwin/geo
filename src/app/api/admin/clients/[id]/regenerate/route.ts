@@ -43,7 +43,7 @@ export async function POST(
 
   if (updated.count === 0) {
     const waitSec = client.lastRegenerateAt
-      ? Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRegenerateAt.getTime())) / 1000)
+      ? Math.max(0, Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRegenerateAt.getTime())) / 1000))
       : 0;
     return NextResponse.json(
       { error: `Please wait ${waitSec}s before triggering again.` },

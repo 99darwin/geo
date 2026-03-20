@@ -56,6 +56,7 @@ export default function AdminClientDetailPage() {
   const [recheckLoading, setRecheckLoading] = useState(false);
   const [regenerateLoading, setRegenerateLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
+  const [actionIsError, setActionIsError] = useState(false);
 
   const loadClient = useCallback(async () => {
     setLoading(true);
@@ -114,6 +115,7 @@ export default function AdminClientDetailPage() {
   async function handleRecheck() {
     setRecheckLoading(true);
     setActionMessage('');
+    setActionIsError(false);
     try {
       const res = await fetch(`/api/admin/clients/${id}/recheck`, { method: 'POST' });
       if (res.ok) {
@@ -121,9 +123,11 @@ export default function AdminClientDetailPage() {
       } else {
         const json = await res.json().catch(() => null);
         setActionMessage(json?.error ?? 'Failed to trigger recheck.');
+        setActionIsError(true);
       }
     } catch {
       setActionMessage('Failed to trigger recheck.');
+      setActionIsError(true);
     } finally {
       setRecheckLoading(false);
     }
@@ -132,6 +136,7 @@ export default function AdminClientDetailPage() {
   async function handleRegenerate() {
     setRegenerateLoading(true);
     setActionMessage('');
+    setActionIsError(false);
     try {
       const res = await fetch(`/api/admin/clients/${id}/regenerate`, { method: 'POST' });
       if (res.ok) {
@@ -139,9 +144,11 @@ export default function AdminClientDetailPage() {
       } else {
         const json = await res.json().catch(() => null);
         setActionMessage(json?.error ?? 'Failed to trigger regeneration.');
+        setActionIsError(true);
       }
     } catch {
       setActionMessage('Failed to trigger regeneration.');
+      setActionIsError(true);
     } finally {
       setRegenerateLoading(false);
     }
@@ -205,7 +212,7 @@ export default function AdminClientDetailPage() {
           Regenerate Files
         </Button>
         {actionMessage && (
-          <span className="text-sm text-gray-600">{actionMessage}</span>
+          <span className={`text-sm ${actionIsError ? 'text-red-600' : 'text-gray-600'}`}>{actionMessage}</span>
         )}
       </div>
 
@@ -370,9 +377,13 @@ export default function AdminClientDetailPage() {
               <div key={comp.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-4 py-3">
                 <span className="text-sm font-medium text-gray-700">{comp.competitorName}</span>
                 {comp.competitorUrl && (
-                  <a href={comp.competitorUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 hover:text-indigo-500">
-                    {comp.competitorUrl}
-                  </a>
+                  /^https?:\/\//i.test(comp.competitorUrl) ? (
+                    <a href={comp.competitorUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 hover:text-indigo-500">
+                      {comp.competitorUrl}
+                    </a>
+                  ) : (
+                    <span className="text-xs text-gray-400">{comp.competitorUrl}</span>
+                  )
                 )}
               </div>
             ))}
