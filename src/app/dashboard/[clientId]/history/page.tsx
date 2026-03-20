@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PLATFORM_LABELS, PLATFORMS } from '@/lib/constants';
 
 interface Citation {
   id: string;
@@ -14,16 +15,6 @@ interface Citation {
   queryText: string;
   checkedAt: string;
 }
-
-const PLATFORM_LABELS: Record<string, string> = {
-  chatgpt: 'ChatGPT',
-  perplexity: 'Perplexity',
-  google_ai: 'Google AI',
-  gemini: 'Gemini',
-  copilot: 'Copilot',
-};
-
-const PLATFORMS = ['', 'chatgpt', 'perplexity', 'google_ai', 'gemini', 'copilot'];
 
 export default function ClientHistoryPage() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -101,10 +92,11 @@ export default function ClientHistoryPage() {
         <select
           value={platform}
           onChange={(e) => setPlatform(e.target.value)}
+          aria-label="Filter by platform"
           className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700"
         >
           <option value="">All platforms</option>
-          {PLATFORMS.filter(Boolean).map((p) => (
+          {PLATFORMS.map((p) => (
             <option key={p} value={p}>
               {PLATFORM_LABELS[p]}
             </option>
@@ -124,14 +116,14 @@ export default function ClientHistoryPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" aria-label="Citation history">
                 <thead>
                   <tr className="border-b border-gray-100 text-left text-gray-500">
-                    <th className="pb-3 font-medium">Query</th>
-                    <th className="pb-3 font-medium">Platform</th>
-                    <th className="pb-3 font-medium">Status</th>
-                    <th className="pb-3 font-medium">Position</th>
-                    <th className="pb-3 font-medium">Date</th>
+                    <th scope="col" className="pb-3 font-medium">Query</th>
+                    <th scope="col" className="pb-3 font-medium">Platform</th>
+                    <th scope="col" className="pb-3 font-medium">Status</th>
+                    <th scope="col" className="pb-3 font-medium">Position</th>
+                    <th scope="col" className="pb-3 font-medium">Date</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">

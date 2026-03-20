@@ -56,6 +56,8 @@ export function ScoreChart({ data, width = 600, height = 250 }: ScoreChartProps)
       viewBox={`0 0 ${width} ${height}`}
       className="w-full"
       preserveAspectRatio="xMidYMid meet"
+      role="img"
+      aria-label={`Score history chart: ${data.map((d) => `${formatMonth(d.period)} ${d.score}`).join(', ')}`}
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

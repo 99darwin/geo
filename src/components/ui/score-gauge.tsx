@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface ScoreGaugeProps {
   score: number;
@@ -22,21 +22,25 @@ function getScoreLabel(score: number): string {
 export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
   const [animatedScore, setAnimatedScore] = useState(0);
 
+  const rafRef = useRef<number>(0);
+
   useEffect(() => {
     const duration = 1000;
-    const steps = 60;
-    const increment = score / steps;
-    let current = 0;
-    let step = 0;
+    let start: number | null = null;
 
-    const timer = setInterval(() => {
-      step++;
-      current = Math.min(score, Math.round(increment * step));
-      setAnimatedScore(current);
-      if (step >= steps) clearInterval(timer);
-    }, duration / steps);
+    function tick(timestamp: number) {
+      if (!start) start = timestamp;
+      const elapsed = timestamp - start;
+      const t = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3); // easeOutCubic
+      setAnimatedScore(Math.round(eased * score));
+      if (t < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    }
 
-    return () => clearInterval(timer);
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
   }, [score]);
 
   const strokeWidth = 10;
@@ -48,7 +52,14 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <svg width={size} height={size} className="-rotate-90">
+      <div className="relative" style={{ width: size, height: size }}>
+      <svg
+        width={size}
+        height={size}
+        className="-rotate-90"
+        role="img"
+        aria-label={`Visibility score: ${score} out of 100, rated ${getScoreLabel(score)}`}
+      >
         {/* Background circle */}
         <circle
           cx={center}
@@ -74,13 +85,13 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
       </svg>
       {/* Score text overlaid in center */}
       <div
-        className="absolute flex flex-col items-center justify-center"
-        style={{ width: size, height: size }}
+        className="absolute inset-0 flex flex-col items-center justify-center"
       >
-        <span className="text-4xl font-bold text-gray-900">
+        <span className="font-bold text-gray-900" style={{ fontSize: size * 0.225 }}>
           {animatedScore}
         </span>
-        <span className="text-sm text-gray-500">{getScoreLabel(score)}</span>
+        <span className="text-gray-500" style={{ fontSize: size * 0.09 }}>{getScoreLabel(score)}</span>
+      </div>
       </div>
     </div>
   );

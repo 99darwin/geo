@@ -3,21 +3,16 @@
 import type { ScanResult } from '@/types';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { Card } from '@/components/ui/card';
+import { PLATFORM_LABELS } from '@/lib/constants';
 
 interface ScanResultsProps {
   result: ScanResult;
 }
 
 function PlatformIcon({ platform }: { platform: string }) {
-  const labels: Record<string, string> = {
-    chatgpt: 'ChatGPT',
-    perplexity: 'Perplexity',
-    gemini: 'Gemini',
-    google_ai: 'Google AI',
-  };
   return (
     <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-      {labels[platform] || platform}
+      {PLATFORM_LABELS[platform] || platform}
     </span>
   );
 }
@@ -102,14 +97,15 @@ export function ScanResults({ result }: ScanResultsProps) {
       {/* Query Results Table */}
       <Card title="Query Results">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-sm" aria-label="Query results by platform">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="py-2 pr-4 text-left font-medium text-gray-500">
+                <th scope="col" className="py-2 pr-4 text-left font-medium text-gray-500">
                   Query
                 </th>
                 {result.platforms.map((p) => (
                   <th
+                    scope="col"
                     key={p.platform}
                     className="px-3 py-2 text-center font-medium text-gray-500"
                   >

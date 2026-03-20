@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { ScoreChart } from '@/components/ui/score-chart';
+import { PLATFORM_LABELS } from '@/lib/constants';
 
 interface Recommendation {
   id: string;
@@ -57,14 +58,6 @@ interface DashboardData {
   recommendations: Recommendation[];
   competitors: CompetitorData[];
 }
-
-const PLATFORM_LABELS: Record<string, string> = {
-  chatgpt: 'ChatGPT',
-  perplexity: 'Perplexity',
-  google_ai: 'Google AI',
-  gemini: 'Gemini',
-  copilot: 'Copilot',
-};
 
 export default function ClientDashboardPage() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -354,13 +347,13 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
       {recentCitations.length > 0 && (
         <Card className="mt-6" title="Recent Citations">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" aria-label="Recent citations">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-gray-500">
-                  <th className="pb-3 font-medium">Query</th>
-                  <th className="pb-3 font-medium">Platform</th>
-                  <th className="pb-3 font-medium">Status</th>
-                  <th className="pb-3 font-medium">Date</th>
+                  <th scope="col" className="pb-3 font-medium">Query</th>
+                  <th scope="col" className="pb-3 font-medium">Platform</th>
+                  <th scope="col" className="pb-3 font-medium">Status</th>
+                  <th scope="col" className="pb-3 font-medium">Date</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -445,12 +438,12 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
       {competitors.length > 0 && (
         <Card className="mt-6" title="Competitor Visibility">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" aria-label="Competitor visibility">
               <thead>
                 <tr className="border-b border-gray-100 text-left text-gray-500">
-                  <th className="pb-3 font-medium">Competitor</th>
-                  <th className="pb-3 font-medium">Cited In</th>
-                  <th className="pb-3 font-medium">Platforms</th>
+                  <th scope="col" className="pb-3 font-medium">Competitor</th>
+                  <th scope="col" className="pb-3 font-medium">Cited In</th>
+                  <th scope="col" className="pb-3 font-medium">Platforms</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -510,16 +503,18 @@ function FileInstructions({
     <Card className="mt-6">
       <button
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        aria-controls="file-instructions-content"
         className="flex w-full items-center justify-between text-left"
       >
         <span className="text-sm font-semibold text-gray-900">
           How to Add These Files to Your Site
         </span>
-        <span className="text-gray-400 text-sm">{expanded ? '−' : '+'}</span>
+        <span className="text-gray-400 text-sm" aria-hidden="true">{expanded ? '−' : '+'}</span>
       </button>
 
       {expanded && (
-        <div className="mt-4 space-y-6">
+        <div id="file-instructions-content" className="mt-4 space-y-6">
           {generatedFiles.llmsTxt && (
             <div>
               <h4 className="text-sm font-medium text-gray-900">llms.txt</h4>
