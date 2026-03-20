@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
@@ -68,8 +69,14 @@ export function DashboardShell({ userName, children }: DashboardShellProps) {
       <aside className="hidden w-64 flex-shrink-0 border-r border-gray-200 bg-white md:block">
         <div className="flex h-full flex-col">
           <div className="flex h-16 items-center px-6 border-b border-gray-100">
-            <Link href="/" className="text-xl font-bold text-indigo-600">
-              GEO
+            <Link href="/" className="flex items-center">
+              <Image
+                src="/wordmark.png"
+                alt="LookGEO"
+                width={926}
+                height={196}
+                className="h-6 w-auto"
+              />
             </Link>
           </div>
 
@@ -111,11 +118,14 @@ export function DashboardShell({ userName, children }: DashboardShellProps) {
         {/* Header */}
         <header className="relative flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
           {/* Mobile logo */}
-          <Link
-            href="/"
-            className="text-xl font-bold text-indigo-600 md:hidden"
-          >
-            GEO
+          <Link href="/" className="flex items-center md:hidden">
+            <Image
+              src="/wordmark.png"
+              alt="LookGEO"
+              width={926}
+              height={196}
+              className="h-6 w-auto"
+            />
           </Link>
 
           <div className="hidden md:block">

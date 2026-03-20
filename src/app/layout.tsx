@@ -17,9 +17,12 @@ const dmMono = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'GEO - AI Visibility for Local Businesses',
+  title: 'LookGEO - AI Visibility for Local Businesses',
   description:
     'Check if your business is visible to AI search engines like ChatGPT, Perplexity, and Gemini. Get optimized for AI-powered discovery.',
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

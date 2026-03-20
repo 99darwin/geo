@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession, signOut } from 'next-auth/react';
 
 export function Navbar() {
@@ -10,8 +11,15 @@ export function Navbar() {
   return (
     <nav className="sticky top-0 z-50 border-b border-gray-100 bg-white/80 backdrop-blur-sm">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="text-lg font-bold text-indigo-600">
-          GEO
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/wordmark.png"
+            alt="LookGEO"
+            width={926}
+            height={196}
+            className="h-7 w-auto"
+            priority
+          />
         </Link>
 
         {!isLoading && (
