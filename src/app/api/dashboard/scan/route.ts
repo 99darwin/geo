@@ -94,8 +94,9 @@ export async function POST(
 
   // Persist results to database
   let persisted = true;
+  let reportId: string | undefined;
   try {
-    await persistScanResults(userId, parsed.data.url, result);
+    reportId = await persistScanResults(userId, parsed.data.url, result);
   } catch (error) {
     persisted = false;
     const msg = error instanceof Error ? error.message : "Unknown error";
@@ -103,7 +104,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { data: result, persisted },
+    { data: result, persisted, reportId },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }
   );
 }
@@ -112,7 +113,7 @@ async function persistScanResults(
   userId: string,
   url: string,
   result: ScanResult
-): Promise<void> {
+): Promise<string> {
   // Find existing client for this user, or create one.
   // Free-scan users get one client record — re-scanning a different URL updates it.
   let client = await prisma.client.findFirst({
@@ -201,4 +202,16 @@ async function persistScanResults(
       breakdown: breakdownJson,
     },
   });
+
+  // Save a snapshot of the full scan result as a report
+  const report = await prisma.scanReport.create({
+    data: {
+      clientId,
+      url,
+      score: result.score,
+      data: JSON.parse(JSON.stringify(result)),
+    },
+  });
+
+  return report.id;
 }
