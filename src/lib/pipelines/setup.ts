@@ -335,15 +335,17 @@ async function executeSetupSteps(clientId: string): Promise<void> {
   // Competitor detection from citation responses
   const citationResponsesForDetection = Array.from(citationResults).flatMap(
     ([queryText, platformMap]) =>
-      Array.from(platformMap).map(([platform, result]) => ({
-        query: queryText,
-        platform,
-        rawResponse: result.rawResponse,
-        sourcesCited: result.sourcesCited,
-      }))
+      Array.from(platformMap)
+        .filter(([, result]) => !!result.rawResponse)
+        .map(([platform, result]) => ({
+          query: queryText,
+          platform,
+          rawResponse: result.rawResponse as string,
+          sourcesCited: result.sourcesCited ?? [],
+        }))
   );
 
-  const detectedCompetitors = detectCompetitors({
+  const detectedCompetitors = await detectCompetitors({
     businessName: updatedClient.businessName,
     citationResponses: citationResponsesForDetection,
   });

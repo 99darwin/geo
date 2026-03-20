@@ -49,6 +49,8 @@ export function ScoreChart({ data, width = 600, height = 250 }: ScoreChartProps)
     return date.toLocaleDateString("en-US", { month: "short" });
   };
 
+  const gradientId = `scoreGradient-${data.length}-${data[0]?.period ?? "default"}`;
+
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
@@ -56,7 +58,7 @@ export function ScoreChart({ data, width = 600, height = 250 }: ScoreChartProps)
       preserveAspectRatio="xMidYMid meet"
     >
       <defs>
-        <linearGradient id="scoreGradient" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="rgb(99, 102, 241)" stopOpacity="0.2" />
           <stop offset="100%" stopColor="rgb(99, 102, 241)" stopOpacity="0.02" />
         </linearGradient>
@@ -90,7 +92,7 @@ export function ScoreChart({ data, width = 600, height = 250 }: ScoreChartProps)
       })}
 
       {/* Fill area */}
-      <path d={fillPath} fill="url(#scoreGradient)" />
+      <path d={fillPath} fill={`url(#${gradientId})`} />
 
       {/* Line */}
       <polyline
