@@ -124,6 +124,8 @@ model Client {
   stripeCustomerId      String?          @unique
   stripeSubscriptionId  String?          @unique
   userId                String           @unique
+  lastRecheckAt         DateTime?
+  lastRegenerateAt      DateTime?
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 

@@ -116,8 +116,12 @@ export default function AdminClientDetailPage() {
     setActionMessage('');
     try {
       const res = await fetch(`/api/admin/clients/${id}/recheck`, { method: 'POST' });
-      if (res.ok) setActionMessage('Citation recheck triggered.');
-      else setActionMessage('Failed to trigger recheck.');
+      if (res.ok) {
+        setActionMessage('Citation recheck triggered.');
+      } else {
+        const json = await res.json().catch(() => null);
+        setActionMessage(json?.error ?? 'Failed to trigger recheck.');
+      }
     } catch {
       setActionMessage('Failed to trigger recheck.');
     } finally {
@@ -130,8 +134,12 @@ export default function AdminClientDetailPage() {
     setActionMessage('');
     try {
       const res = await fetch(`/api/admin/clients/${id}/regenerate`, { method: 'POST' });
-      if (res.ok) setActionMessage('File regeneration triggered.');
-      else setActionMessage('Failed to trigger regeneration.');
+      if (res.ok) {
+        setActionMessage('File regeneration triggered.');
+      } else {
+        const json = await res.json().catch(() => null);
+        setActionMessage(json?.error ?? 'Failed to trigger regeneration.');
+      }
     } catch {
       setActionMessage('Failed to trigger regeneration.');
     } finally {

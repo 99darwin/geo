@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,7 +25,7 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const loadStats = () => {
+  const loadStats = useCallback(() => {
     setError(false);
     setLoading(true);
     fetch('/api/admin/stats')
@@ -39,11 +39,11 @@ export default function AdminOverviewPage() {
       })
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
   useEffect(() => {
     loadStats();
-  }, []);
+  }, [loadStats]);
 
   if (loading) {
     return (
