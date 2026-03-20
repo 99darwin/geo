@@ -119,7 +119,8 @@ async function persistScanResults(
 ): Promise<{ reportId: string; clientId: string }> {
   // Find an existing free_scan client for this user, or create one.
   // Paid clients are never touched — each paid subscription is a separate client.
-  // Wrapped in a transaction to prevent race conditions creating duplicate free_scan clients.
+  // Serializable isolation prevents two concurrent requests from both seeing
+  // no existing free_scan client and each creating a duplicate.
   const client = await prisma.$transaction(async (tx) => {
     const existing = await tx.client.findFirst({
       where: { userId, plan: "free_scan" },
@@ -149,7 +150,7 @@ async function persistScanResults(
         onboardingStatus: "scan_complete",
       },
     });
-  });
+  }, { isolationLevel: "Serializable" });
 
   const clientId = client.id;
 
