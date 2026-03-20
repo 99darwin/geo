@@ -31,18 +31,30 @@ export async function POST(
     return NextResponse.json({ error: "Client not eligible for recheck" }, { status: 400 });
   }
 
-  if (client.lastRecheckAt && Date.now() - client.lastRecheckAt.getTime() < COOLDOWN_MS) {
-    const waitSec = Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRecheckAt.getTime())) / 1000);
+  // Atomic cooldown: only update if expired or never set
+  const cooldownThreshold = new Date(Date.now() - COOLDOWN_MS);
+  const updated = await prisma.client.updateMany({
+    where: {
+      id,
+      OR: [
+        { lastRecheckAt: null },
+        { lastRecheckAt: { lt: cooldownThreshold } },
+      ],
+    },
+    data: { lastRecheckAt: new Date() },
+  });
+
+  if (updated.count === 0) {
+    const waitSec = client.lastRecheckAt
+      ? Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRecheckAt.getTime())) / 1000)
+      : 0;
     return NextResponse.json(
       { error: `Please wait ${waitSec}s before triggering again.` },
       { status: 429 }
     );
   }
 
-  await prisma.client.update({ where: { id }, data: { lastRecheckAt: new Date() } });
-
   // Run in background — don't block the response
-  // Note: Using waitUntil if available, otherwise fire-and-forget
   const promise = runMonthlyCheck(id).catch((err) => {
     console.error(`[Admin Recheck] Failed for ${id}:`, err);
   });

@@ -23,18 +23,32 @@ export async function POST(
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
 
-  if (client.lastRegenerateAt && Date.now() - client.lastRegenerateAt.getTime() < COOLDOWN_MS) {
-    const waitSec = Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRegenerateAt.getTime())) / 1000);
+  // Check blocked URL before consuming cooldown
+  if (isBlockedUrl(client.websiteUrl)) {
+    return NextResponse.json({ error: "Blocked URL" }, { status: 400 });
+  }
+
+  // Atomic cooldown: only update if expired or never set
+  const cooldownThreshold = new Date(Date.now() - COOLDOWN_MS);
+  const updated = await prisma.client.updateMany({
+    where: {
+      id,
+      OR: [
+        { lastRegenerateAt: null },
+        { lastRegenerateAt: { lt: cooldownThreshold } },
+      ],
+    },
+    data: { lastRegenerateAt: new Date() },
+  });
+
+  if (updated.count === 0) {
+    const waitSec = client.lastRegenerateAt
+      ? Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRegenerateAt.getTime())) / 1000)
+      : 0;
     return NextResponse.json(
       { error: `Please wait ${waitSec}s before triggering again.` },
       { status: 429 }
     );
-  }
-
-  await prisma.client.update({ where: { id }, data: { lastRegenerateAt: new Date() } });
-
-  if (isBlockedUrl(client.websiteUrl)) {
-    return NextResponse.json({ error: "Blocked URL" }, { status: 400 });
   }
 
   const promise = (async () => {
