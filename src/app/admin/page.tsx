@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { PLAN_LABELS } from '@/lib/admin-constants';
 
 interface StatsData {
   totalClients: number;
@@ -18,24 +20,29 @@ interface StatsData {
   }[];
 }
 
-const PLAN_LABELS: Record<string, string> = {
-  free_scan: 'Free',
-  starter: 'Starter',
-  growth: 'Growth',
-};
-
 export default function AdminOverviewPage() {
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
+  const loadStats = () => {
+    setError(false);
+    setLoading(true);
     fetch('/api/admin/stats')
       .then(async (res) => {
-        if (!res.ok) return;
+        if (!res.ok) {
+          setError(true);
+          return;
+        }
         const json = await res.json();
         setStats(json.data);
       })
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadStats();
   }, []);
 
   if (loading) {
@@ -47,6 +54,21 @@ export default function AdminOverviewPage() {
             <div key={i} className="h-24 rounded-lg bg-gray-200" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-5xl">
+        <Card>
+          <div className="py-8 text-center">
+            <p className="text-gray-500">Failed to load admin stats.</p>
+            <Button variant="secondary" size="sm" className="mt-3" onClick={loadStats}>
+              Retry
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }

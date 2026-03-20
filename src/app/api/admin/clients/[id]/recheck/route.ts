@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { runMonthlyCheck } from "@/lib/pipelines/monthly-check";
 import type { ApiResponse } from "@/types";
 
+const recentTriggers = new Map<string, number>();
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per client
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -28,6 +31,16 @@ export async function POST(
   ) {
     return NextResponse.json({ error: "Client not eligible for recheck" }, { status: 400 });
   }
+
+  const lastTrigger = recentTriggers.get(id);
+  if (lastTrigger && Date.now() - lastTrigger < COOLDOWN_MS) {
+    const waitSec = Math.ceil((COOLDOWN_MS - (Date.now() - lastTrigger)) / 1000);
+    return NextResponse.json(
+      { error: `Please wait ${waitSec}s before triggering again.` },
+      { status: 429 }
+    );
+  }
+  recentTriggers.set(id, Date.now());
 
   // Run in background — don't block the response
   // Note: Using waitUntil if available, otherwise fire-and-forget

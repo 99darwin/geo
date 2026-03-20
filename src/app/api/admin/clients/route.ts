@@ -73,6 +73,8 @@ export async function GET(
         total,
         page,
       },
+    }, {
+      headers: { "Cache-Control": "private, no-store" },
     });
   } catch (error) {
     console.error("[GET /api/admin/clients]", error);

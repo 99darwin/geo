@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState, useCallback, type FormEvent } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { PLAN_LABELS, STATUS_LABELS, PLATFORM_LABELS } from '@/lib/admin-constants';
 
 interface AdminNote {
   id: string;
@@ -44,48 +45,45 @@ interface ClientDetail {
   queries: { id: string; queryText: string }[];
 }
 
-const PLATFORM_LABELS: Record<string, string> = {
-  chatgpt: 'ChatGPT',
-  perplexity: 'Perplexity',
-  google_ai: 'Google AI',
-  gemini: 'Gemini',
-  copilot: 'Copilot',
-};
-
-const PLAN_LABELS: Record<string, string> = {
-  free_scan: 'Free',
-  starter: 'Starter',
-  growth: 'Growth',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  scan_complete: 'Scan Complete',
-  setup_pending: 'Setup Pending',
-  setup_complete: 'Setup Complete',
-  active: 'Active',
-};
-
 export default function AdminClientDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [client, setClient] = useState<ClientDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [noteContent, setNoteContent] = useState('');
   const [noteLoading, setNoteLoading] = useState(false);
+  const [noteError, setNoteError] = useState('');
+  const [recheckLoading, setRecheckLoading] = useState(false);
+  const [regenerateLoading, setRegenerateLoading] = useState(false);
+  const [actionMessage, setActionMessage] = useState('');
+
+  const loadClient = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(`/api/admin/clients/${id}`);
+      if (!res.ok) {
+        setError(true);
+        return;
+      }
+      const json = await res.json();
+      setClient(json.data);
+    } catch {
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    fetch(`/api/admin/clients/${id}`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const json = await res.json();
-        setClient(json.data);
-      })
-      .finally(() => setLoading(false));
-  }, [id]);
+    loadClient();
+  }, [loadClient]);
 
   async function handleAddNote(e: FormEvent) {
     e.preventDefault();
     if (!noteContent.trim()) return;
     setNoteLoading(true);
+    setNoteError('');
 
     try {
       const res = await fetch(`/api/admin/clients/${id}/notes`, {
@@ -102,9 +100,42 @@ export default function AdminClientDetailPage() {
             : prev
         );
         setNoteContent('');
+        setNoteError('');
+      } else {
+        setNoteError('Failed to save note.');
       }
+    } catch {
+      setNoteError('Failed to save note.');
     } finally {
       setNoteLoading(false);
+    }
+  }
+
+  async function handleRecheck() {
+    setRecheckLoading(true);
+    setActionMessage('');
+    try {
+      const res = await fetch(`/api/admin/clients/${id}/recheck`, { method: 'POST' });
+      if (res.ok) setActionMessage('Citation recheck triggered.');
+      else setActionMessage('Failed to trigger recheck.');
+    } catch {
+      setActionMessage('Failed to trigger recheck.');
+    } finally {
+      setRecheckLoading(false);
+    }
+  }
+
+  async function handleRegenerate() {
+    setRegenerateLoading(true);
+    setActionMessage('');
+    try {
+      const res = await fetch(`/api/admin/clients/${id}/regenerate`, { method: 'POST' });
+      if (res.ok) setActionMessage('File regeneration triggered.');
+      else setActionMessage('Failed to trigger regeneration.');
+    } catch {
+      setActionMessage('Failed to trigger regeneration.');
+    } finally {
+      setRegenerateLoading(false);
     }
   }
 
@@ -114,6 +145,21 @@ export default function AdminClientDetailPage() {
         <div className="h-8 w-64 rounded bg-gray-200" />
         <div className="h-48 rounded-lg bg-gray-200" />
         <div className="h-48 rounded-lg bg-gray-200" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-4xl">
+        <Card>
+          <p className="text-center text-gray-500">Failed to load client details.</p>
+          <div className="mt-4 text-center">
+            <Button size="sm" onClick={loadClient}>
+              Retry
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -142,6 +188,18 @@ export default function AdminClientDetailPage() {
       <p className="mt-1 text-gray-500">
         {client.city}{client.state ? `, ${client.state}` : ''} — {client.websiteUrl}
       </p>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Button size="sm" onClick={handleRecheck} isLoading={recheckLoading}>
+          Recheck Citations
+        </Button>
+        <Button size="sm" variant="secondary" onClick={handleRegenerate} isLoading={regenerateLoading}>
+          Regenerate Files
+        </Button>
+        {actionMessage && (
+          <span className="text-sm text-gray-600">{actionMessage}</span>
+        )}
+      </div>
 
       {/* Overview Cards */}
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -296,6 +354,37 @@ export default function AdminClientDetailPage() {
         </Card>
       )}
 
+      {/* Competitors */}
+      {client.competitors.length > 0 && (
+        <Card className="mt-6" title="Competitors">
+          <div className="space-y-2">
+            {client.competitors.map((comp) => (
+              <div key={comp.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-4 py-3">
+                <span className="text-sm font-medium text-gray-700">{comp.competitorName}</span>
+                {comp.competitorUrl && (
+                  <a href={comp.competitorUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-indigo-600 hover:text-indigo-500">
+                    {comp.competitorUrl}
+                  </a>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Active Queries */}
+      {client.queries.length > 0 && (
+        <Card className="mt-6" title="Active Queries">
+          <div className="flex flex-wrap gap-2">
+            {client.queries.map((q) => (
+              <span key={q.id} className="rounded-full bg-gray-100 px-3 py-1 text-sm text-gray-700">
+                {q.queryText}
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Admin Notes */}
       <Card className="mt-6" title="Admin Notes">
         <form onSubmit={handleAddNote} className="mb-4">
@@ -304,6 +393,7 @@ export default function AdminClientDetailPage() {
             onChange={(e) => setNoteContent(e.target.value)}
             placeholder="Add a note..."
             rows={3}
+            aria-label="Admin note content"
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 placeholder:text-gray-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
           />
           <Button
@@ -315,6 +405,9 @@ export default function AdminClientDetailPage() {
           >
             Add Note
           </Button>
+          {noteError && (
+            <p className="mt-1 text-sm text-red-600">{noteError}</p>
+          )}
         </form>
 
         {client.adminNotes.length === 0 ? (

@@ -7,6 +7,9 @@ import { generateSchemaScript } from "@/lib/engines/generators/schema-jsonld";
 import { isBlockedUrl } from "@/lib/url-validation";
 import type { ApiResponse } from "@/types";
 
+const recentTriggers = new Map<string, number>();
+const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per client
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -20,6 +23,16 @@ export async function POST(
   if (!client) {
     return NextResponse.json({ error: "Client not found" }, { status: 404 });
   }
+
+  const lastTrigger = recentTriggers.get(id);
+  if (lastTrigger && Date.now() - lastTrigger < COOLDOWN_MS) {
+    const waitSec = Math.ceil((COOLDOWN_MS - (Date.now() - lastTrigger)) / 1000);
+    return NextResponse.json(
+      { error: `Please wait ${waitSec}s before triggering again.` },
+      { status: 429 }
+    );
+  }
+  recentTriggers.set(id, Date.now());
 
   if (isBlockedUrl(client.websiteUrl)) {
     return NextResponse.json({ error: "Blocked URL" }, { status: 400 });
