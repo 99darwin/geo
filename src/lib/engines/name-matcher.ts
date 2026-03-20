@@ -88,12 +88,16 @@ export function generateVariations(businessName: string): string[] {
     variations.add(words.slice(0, 2).join(" ").replace(/'s\b/g, ""));
     // Last two words and last word (brand names often appear at the end)
     variations.add(words.slice(-2).join(" "));
-    variations.add(words[words.length - 1]);
-    variations.add(words[0]);
+    // Only add single-word variants if they're long enough to avoid false positives
+    // (e.g., "company", "hotel", "best" would match too broadly)
+    const lastWord = words[words.length - 1];
+    if (lastWord.length >= 6) variations.add(lastWord);
+    const firstWord = words[0];
+    if (firstWord.length >= 6) variations.add(firstWord);
   }
 
   // Split on common title separators and add each segment
-  const separatorRegex = /\s*(?:[|–—:·]|\s-\s)\s*/;
+  const separatorRegex = /\s*(?:[|–—·]|\s-\s)\s*/;
   if (separatorRegex.test(lower)) {
     const segments = lower.split(separatorRegex).map((s) => s.trim()).filter((s) => s.length > 0);
     for (const segment of segments) {

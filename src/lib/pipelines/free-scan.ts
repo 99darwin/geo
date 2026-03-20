@@ -115,7 +115,7 @@ function cleanBusinessNameFromTitle(rawTitle: string, url: string): string {
 
   // Split on common title separators (but not bare hyphens inside words like "Chick-fil-A")
   const segments = trimmed
-    .split(/\s*(?:[|–—:·]|\s-\s)\s*/)
+    .split(/\s*(?:[|–—·]|\s-\s)\s*/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
@@ -131,8 +131,9 @@ function cleanBusinessNameFromTitle(rawTitle: string, url: string): string {
   }
 
   if (domainStem && domainStem.length > 1) {
+    // Strip spaces so "bestbuy" matches "Best Buy"
     const domainMatch = segments.find((s) =>
-      s.toLowerCase().includes(domainStem)
+      s.toLowerCase().replace(/\s+/g, "").includes(domainStem)
     );
     if (domainMatch) return domainMatch;
   }
