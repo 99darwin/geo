@@ -279,8 +279,14 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   // Store NAP results
   if (napResult.status === "fulfilled") {
     await Promise.all(
-      napResult.value.map((nap) =>
-        prisma.napAudit.create({
+      napResult.value.map(async (nap) => {
+        const existing = await prisma.napAudit.findFirst({
+          where: { clientId, platform: nap.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook" },
+          orderBy: { checkedAt: "desc" },
+        });
+        // Skip if already checked today
+        if (existing && existing.checkedAt.toDateString() === new Date().toDateString()) return;
+        await prisma.napAudit.create({
           data: {
             clientId,
             platform: nap.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
@@ -290,8 +296,8 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
             listingUrl: nap.listingUrl ?? null,
             issues: nap.issues,
           },
-        })
-      )
+        });
+      })
     );
   } else {
     console.warn("[Monthly Check] NAP check failed:", napResult.reason);
@@ -300,16 +306,22 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   // Store review snapshots
   if (reviewResult.status === "fulfilled") {
     await Promise.all(
-      reviewResult.value.map((review) =>
-        prisma.reviewSnapshot.create({
+      reviewResult.value.map(async (review) => {
+        const existing = await prisma.reviewSnapshot.findFirst({
+          where: { clientId, platform: review.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook" },
+          orderBy: { checkedAt: "desc" },
+        });
+        // Skip if already checked today
+        if (existing && existing.checkedAt.toDateString() === new Date().toDateString()) return;
+        await prisma.reviewSnapshot.create({
           data: {
             clientId,
             platform: review.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
             rating: review.rating,
             reviewCount: review.reviewCount,
           },
-        })
-      )
+        });
+      })
     );
   } else {
     console.warn("[Monthly Check] Review pull failed:", reviewResult.reason);
@@ -419,14 +431,25 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
 
   // Step 12: Compute visibility score
   console.log("[Monthly Check] Computing visibility score");
+  const [activeLlmsTxt, activeSchema] = await Promise.all([
+    prisma.generatedFile.findFirst({
+      where: { clientId, fileType: "llms_txt", isActive: true },
+      select: { id: true },
+    }),
+    prisma.generatedFile.findFirst({
+      where: { clientId, fileType: "schema_json", isActive: true },
+      select: { id: true },
+    }),
+  ]);
+
   const scoreResult = calculateVisibilityScore({
     citedQueries: citedQueryCount,
     totalQueries: queryTexts.length,
     platformsCiting: platformsCiting.size,
     totalPlatforms: ALL_PLATFORMS.length,
     citations: allCitationPositions,
-    hasLlmsTxt: true,
-    hasSchema: true,
+    hasLlmsTxt: !!activeLlmsTxt,
+    hasSchema: !!activeSchema,
     hasCleanRobotsTxt: robotsAudit.blocked.length === 0,
   });
 

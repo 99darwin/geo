@@ -103,11 +103,11 @@ export async function POST(
     }
 
     console.log(`[Admin Regenerate] Complete for client ${id}`);
-  })();
+  })().catch((err) => console.error(`[Admin Regenerate] Failed for ${id}:`, err));
 
   try {
     const { waitUntil } = await import("@vercel/functions");
-    waitUntil(promise.catch((err) => console.error(`[Admin Regenerate] Failed for ${id}:`, err)));
+    waitUntil(promise);
   } catch {
     // fire and forget in dev
   }
