@@ -7,16 +7,16 @@ import type { ScanResult } from '@/types';
 import { ScanResults } from '@/components/scan-results';
 import { Card } from '@/components/ui/card';
 
-export default function ReportDetailPage() {
-  const { id } = useParams<{ id: string }>();
+export default function ClientReportDetailPage() {
+  const { clientId, id } = useParams<{ clientId: string; id: string }>();
   const [result, setResult] = useState<ScanResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!id) return;
+    if (!clientId || !id) return;
 
-    fetch(`/api/dashboard/reports/${id}`)
+    fetch(`/api/dashboard/reports/${id}?clientId=${clientId}`)
       .then(async (res) => {
         if (!res.ok) {
           setError(res.status === 404 ? 'Report not found.' : 'Failed to load report.');
@@ -27,7 +27,7 @@ export default function ReportDetailPage() {
       })
       .catch(() => setError('Failed to load report.'))
       .finally(() => setLoading(false));
-  }, [id]);
+  }, [clientId, id]);
 
   if (loading) {
     return (
@@ -46,7 +46,7 @@ export default function ReportDetailPage() {
         <Card>
           <p className="py-8 text-center text-red-600">{error || 'Report not found.'}</p>
           <div className="text-center pb-4">
-            <Link href="/dashboard/reports" className="text-sm text-indigo-600 hover:underline">
+            <Link href={`/dashboard/${clientId}/reports`} className="text-sm text-indigo-600 hover:underline">
               Back to Reports
             </Link>
           </div>
@@ -58,7 +58,7 @@ export default function ReportDetailPage() {
   return (
     <div className="mx-auto max-w-4xl">
       <Link
-        href="/dashboard/reports"
+        href={`/dashboard/${clientId}/reports`}
         className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
       >
         &larr; Back to Reports

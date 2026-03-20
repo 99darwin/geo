@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { requireClientOwner } from "@/lib/auth-utils";
 import { prisma } from "@/lib/db";
 import { generateRecommendations } from "@/lib/engines/recommendations";
 import type { ApiResponse, Recommendation } from "@/types";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface DashboardData {
   client: {
@@ -46,23 +47,24 @@ interface DashboardData {
 }
 
 export async function GET(
-  _request: NextRequest
+  request: NextRequest
 ): Promise<NextResponse<ApiResponse<DashboardData>>> {
-  const session = await getServerSession(authOptions);
-
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const clientId = new URL(request.url).searchParams.get("clientId");
+  if (!clientId || !UUID_RE.test(clientId)) {
+    return NextResponse.json({ error: "clientId is required" }, { status: 400 });
   }
 
+  const auth = await requireClientOwner(clientId);
+  if (auth.error) return auth.error;
+
   try {
-    const client = await prisma.client.findFirst({
-      where: { userId: session.user.id },
-      orderBy: { createdAt: "desc" },
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
     });
 
     if (!client) {
       return NextResponse.json(
-        { error: "No client found for this user" },
+        { error: "No client found" },
         { status: 404 }
       );
     }

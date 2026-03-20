@@ -97,31 +97,35 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  // Guard against multiple clients per user (e.g. two checkout sessions with different Stripe customers).
-  // Use upsert keyed on userId to atomically handle the race — if two concurrent webhooks both reach
-  // this point, the unique constraint on userId ensures only one creates and the other updates.
-  const client = await prisma.client.upsert({
-    where: { userId },
-    update: {
-      stripeCustomerId: customerId,
-      stripeSubscriptionId: subscriptionId,
-      plan: "starter",
-      onboardingStatus: "setup_pending",
-      websiteUrl,
-    },
-    create: {
-      businessName: extractDomainName(websiteUrl),
-      websiteUrl,
-      city: "",
-      plan: "starter",
-      onboardingStatus: "setup_pending",
-      stripeCustomerId: customerId,
-      stripeSubscriptionId: subscriptionId,
-      userId,
-    },
-  });
+  // Each checkout creates a new client (users can have multiple subscriptions).
+  // Catch P2002 (unique constraint on stripeCustomerId) in case of duplicate webhook delivery.
+  let client;
+  try {
+    client = await prisma.client.create({
+      data: {
+        businessName: extractDomainName(websiteUrl),
+        websiteUrl,
+        city: "",
+        plan: "starter",
+        onboardingStatus: "setup_pending",
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscriptionId,
+        userId,
+      },
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code: string }).code === "P2002"
+    ) {
+      console.log("[Stripe Webhook] Duplicate webhook delivery for customer:", customerId);
+      return;
+    }
+    throw error;
+  }
 
-  console.log("[Stripe Webhook] Client upserted:", client.id);
+  console.log("[Stripe Webhook] Client created:", client.id);
 
   // Dispatch setup pipeline asynchronously via waitUntil
   dispatchSetupPipeline(client.id);

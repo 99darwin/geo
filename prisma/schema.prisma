@@ -123,7 +123,7 @@ model Client {
   plan                  Plan             @default(free_scan)
   stripeCustomerId      String?          @unique
   stripeSubscriptionId  String?          @unique
-  userId                String           @unique
+  userId                String
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
@@ -138,6 +138,8 @@ model Client {
   industrySources    IndustrySource[]
   adminNotes         AdminNote[]
   scanReports        ScanReport[]
+
+  @@index([userId])
 }
 
 model Query {

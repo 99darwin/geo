@@ -2,25 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import bcrypt from "bcryptjs";
 import { requireAuth } from "@/lib/auth-utils";
+import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
 import type { ApiResponse } from "@/types";
 
 interface SettingsData {
   user: { name: string | null; email: string | null };
-  client: {
-    id: string;
-    businessName: string;
-    websiteUrl: string;
-    city: string;
-    state: string | null;
-    phone: string | null;
-    address: string | null;
-    category: string | null;
-    services: string[];
-    hours: string | null;
-    googleBusinessUrl: string | null;
-  } | null;
 }
+
+const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
+const checkPasswordRateLimit = rateLimit({ interval: FIFTEEN_MINUTES_MS, limit: 5 });
 
 const updateSchema = z.object({
   name: z.string().min(1).optional(),
@@ -40,28 +31,9 @@ export async function GET(
       select: { name: true, email: true },
     });
 
-    const client = await prisma.client.findFirst({
-      where: { userId: auth.session.user.id },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        businessName: true,
-        websiteUrl: true,
-        city: true,
-        state: true,
-        phone: true,
-        address: true,
-        category: true,
-        services: true,
-        hours: true,
-        googleBusinessUrl: true,
-      },
-    });
-
     return NextResponse.json({
       data: {
         user: { name: user?.name ?? null, email: user?.email ?? null },
-        client,
       },
     });
   } catch (error) {
@@ -102,6 +74,15 @@ export async function PATCH(
     }
 
     if (newPassword) {
+      // Rate limit password changes to prevent brute-force attacks
+      const { success: rateLimitOk } = await checkPasswordRateLimit(auth.session.user.id);
+      if (!rateLimitOk) {
+        return NextResponse.json(
+          { error: "Too many password change attempts. Try again later." },
+          { status: 429 }
+        );
+      }
+
       if (!currentPassword) {
         return NextResponse.json(
           { error: "Current password is required to set a new password" },

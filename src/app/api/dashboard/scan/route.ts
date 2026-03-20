@@ -95,8 +95,11 @@ export async function POST(
   // Persist results to database
   let persisted = true;
   let reportId: string | undefined;
+  let clientId: string | undefined;
   try {
-    reportId = await persistScanResults(userId, parsed.data.url, result);
+    const ids = await persistScanResults(userId, parsed.data.url, result);
+    reportId = ids.reportId;
+    clientId = ids.clientId;
   } catch (error) {
     persisted = false;
     const msg = error instanceof Error ? error.message : "Unknown error";
@@ -104,7 +107,7 @@ export async function POST(
   }
 
   return NextResponse.json(
-    { data: result, persisted, reportId },
+    { data: result, persisted, reportId, clientId },
     { headers: { "X-RateLimit-Remaining": String(remaining) } }
   );
 }
@@ -113,29 +116,29 @@ async function persistScanResults(
   userId: string,
   url: string,
   result: ScanResult
-): Promise<string> {
-  // Find existing client for this user, or create one.
-  // Free-scan users get one client record — re-scanning a different URL updates it.
-  let client = await prisma.client.findFirst({
-    where: { userId },
-    orderBy: { createdAt: "desc" },
-  });
+): Promise<{ reportId: string; clientId: string }> {
+  // Find an existing free_scan client for this user, or create one.
+  // Paid clients are never touched — each paid subscription is a separate client.
+  // Wrapped in a transaction to prevent race conditions creating duplicate free_scan clients.
+  const client = await prisma.$transaction(async (tx) => {
+    const existing = await tx.client.findFirst({
+      where: { userId, plan: "free_scan" },
+      orderBy: { createdAt: "desc" },
+    });
 
-  if (client) {
-    // Update with latest scan info if URL or business name changed
-    if (client.websiteUrl !== url || client.businessName !== result.businessInfo.name) {
-      client = await prisma.client.update({
-        where: { id: client.id },
+    if (existing) {
+      return tx.client.update({
+        where: { id: existing.id },
         data: {
           websiteUrl: url,
           businessName: result.businessInfo.name,
-          city: result.businessInfo.city ?? client.city,
-          category: result.businessInfo.category ?? client.category,
+          city: result.businessInfo.city ?? existing.city,
+          category: result.businessInfo.category ?? existing.category,
         },
       });
     }
-  } else {
-    client = await prisma.client.create({
+
+    return tx.client.create({
       data: {
         userId,
         websiteUrl: url,
@@ -146,7 +149,7 @@ async function persistScanResults(
         onboardingStatus: "scan_complete",
       },
     });
-  }
+  });
 
   const clientId = client.id;
 
@@ -213,5 +216,5 @@ async function persistScanResults(
     },
   });
 
-  return report.id;
+  return { reportId: report.id, clientId };
 }

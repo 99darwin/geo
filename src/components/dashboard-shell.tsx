@@ -5,12 +5,30 @@ import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 
-const NAV_ITEMS = [
+const TOP_NAV_ITEMS = [
   { href: '/dashboard', label: 'Overview' },
-  { href: '/dashboard/reports', label: 'Reports' },
-  { href: '/dashboard/history', label: 'History' },
   { href: '/dashboard/settings', label: 'Settings' },
 ];
+
+function getClientNavItems(clientId: string) {
+  return [
+    { href: `/dashboard/${clientId}`, label: 'Overview' },
+    { href: `/dashboard/${clientId}/reports`, label: 'Reports' },
+    { href: `/dashboard/${clientId}/history`, label: 'History' },
+  ];
+}
+
+// Extract clientId from pathname if present (e.g., /dashboard/uuid/reports → uuid)
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function extractClientId(pathname: string): string | null {
+  const segments = pathname.split('/');
+  // /dashboard/[clientId]/...
+  if (segments.length >= 3 && segments[1] === 'dashboard' && UUID_RE.test(segments[2])) {
+    return segments[2];
+  }
+  return null;
+}
 
 interface DashboardShellProps {
   userName: string;
@@ -19,6 +37,11 @@ interface DashboardShellProps {
 
 export function DashboardShell({ userName, children }: DashboardShellProps) {
   const pathname = usePathname();
+  const clientId = extractClientId(pathname);
+
+  const navItems = clientId
+    ? [...getClientNavItems(clientId), { href: '/dashboard/settings', label: 'Settings' }]
+    : TOP_NAV_ITEMS;
 
   return (
     <div className="flex min-h-screen">
@@ -32,7 +55,15 @@ export function DashboardShell({ userName, children }: DashboardShellProps) {
           </div>
 
           <nav className="flex-1 px-4 py-6 space-y-1">
-            {NAV_ITEMS.map((item) => {
+            {clientId && (
+              <Link
+                href="/dashboard"
+                className="flex items-center rounded-lg px-3 py-2 text-xs font-medium text-gray-400 hover:text-gray-600 mb-2"
+              >
+                &larr; All Businesses
+              </Link>
+            )}
+            {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -74,7 +105,7 @@ export function DashboardShell({ userName, children }: DashboardShellProps) {
           <div className="flex items-center gap-4">
             {/* Mobile nav */}
             <nav className="flex gap-2 md:hidden">
-              {NAV_ITEMS.map((item) => {
+              {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 return (
                   <Link

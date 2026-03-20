@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
-import { requireAuth } from "@/lib/auth-utils";
+import { requireClientOwner } from "@/lib/auth-utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { prisma } from "@/lib/db";
 import type { ApiResponse, ScanResult } from "@/types";
@@ -59,10 +59,16 @@ const scanResultSchema = z.object({
 });
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ): Promise<NextResponse<ApiResponse<ScanResult>>> {
-  const auth = await requireAuth();
+  const { searchParams } = new URL(request.url);
+  const clientId = searchParams.get("clientId");
+  if (!clientId || !UUID_RE.test(clientId)) {
+    return NextResponse.json({ error: "clientId is required" }, { status: 400 });
+  }
+
+  const auth = await requireClientOwner(clientId);
   if (auth.error) return auth.error;
 
   const userId = auth.session.user.id;
@@ -83,20 +89,8 @@ export async function GET(
   }
 
   try {
-    // Current model: one client per user (userId has unique constraint).
-    // findFirst + orderBy kept for safety if constraint is ever relaxed.
-    const client = await prisma.client.findFirst({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
-      select: { id: true },
-    });
-
-    if (!client) {
-      return NextResponse.json({ error: "No client found" }, { status: 404 });
-    }
-
     const report = await prisma.scanReport.findFirst({
-      where: { id, clientId: client.id },
+      where: { id, clientId },
     });
 
     if (!report) {

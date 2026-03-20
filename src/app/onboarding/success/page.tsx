@@ -1,18 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 const POLL_INTERVAL_MS = 3000;
-const MAX_POLL_DURATION_MS = 300000; // 5 minutes — pipeline can take a while
+const MAX_POLL_DURATION_MS = 300000; // 5 minutes
 const MAX_CONSECUTIVE_ERRORS = 5;
 
 export default function OnboardingSuccessPage() {
   const router = useRouter();
   const [timedOut, setTimedOut] = useState(false);
   const [status, setStatus] = useState<string>('waiting');
+  // Track client IDs that were already active/complete before polling started,
+  // so we only redirect to the *new* client created by the current checkout.
+  const initialClientIds = useRef<Set<string> | null>(null);
 
   useEffect(() => {
     const start = Date.now();
@@ -23,15 +26,9 @@ export default function OnboardingSuccessPage() {
       if (cancelled) return;
 
       try {
-        const res = await fetch('/api/dashboard');
+        // Poll the clients list to find the newly created client
+        const res = await fetch('/api/dashboard/clients');
 
-        // No client record exists — user landed here without completing checkout
-        if (res.status === 404) {
-          router.push('/dashboard');
-          return;
-        }
-
-        // Auth error — redirect to login
         if (res.status === 401) {
           router.push('/login?callbackUrl=/onboarding/success');
           return;
@@ -39,30 +36,50 @@ export default function OnboardingSuccessPage() {
 
         if (res.ok) {
           consecutiveErrors = 0;
-          const data = await res.json();
-          const onboardingStatus = data.data?.client?.onboardingStatus;
+          const json = await res.json();
+          const clients = json.data?.clients ?? [];
 
-          if (onboardingStatus === 'setup_complete' || onboardingStatus === 'active') {
-            router.push('/dashboard');
-            return;
+          // On the first successful poll, snapshot IDs of already-completed clients
+          if (initialClientIds.current === null) {
+            initialClientIds.current = new Set(
+              clients
+                .filter(
+                  (c: { onboardingStatus: string }) =>
+                    c.onboardingStatus === 'setup_complete' || c.onboardingStatus === 'active'
+                )
+                .map((c: { id: string }) => c.id)
+            );
           }
 
-          // Update display status for user feedback
-          if (onboardingStatus === 'setup_running') {
-            setStatus('running');
-          } else if (onboardingStatus === 'setup_pending') {
-            setStatus('pending');
+          // Find a client that's still being set up or just completed
+          const settingUp = clients.find(
+            (c: { onboardingStatus: string }) =>
+              c.onboardingStatus === 'setup_pending' || c.onboardingStatus === 'setup_running'
+          );
+          // Only consider clients that weren't already complete when we started polling
+          const justCompleted = clients.find(
+            (c: { id: string; onboardingStatus: string }) =>
+              !initialClientIds.current!.has(c.id) &&
+              (c.onboardingStatus === 'setup_complete' || c.onboardingStatus === 'active')
+          );
+
+          if (settingUp) {
+            setStatus(settingUp.onboardingStatus === 'setup_running' ? 'running' : 'pending');
+          } else if (justCompleted) {
+            // Setup finished — go to that client's dashboard
+            router.push(`/dashboard/${justCompleted.id}`);
+            return;
+          } else if (clients.length === 0) {
+            // No client yet — webhook hasn't fired
+            setStatus('waiting');
           }
         } else {
-          // Non-2xx, non-404, non-401 — count as error
           consecutiveErrors++;
         }
       } catch {
-        // Network error — count toward threshold
         consecutiveErrors++;
       }
 
-      // Too many consecutive errors — show timeout/fallback
       if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
         setTimedOut(true);
         return;

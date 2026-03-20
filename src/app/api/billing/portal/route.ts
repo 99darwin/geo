@@ -1,17 +1,28 @@
-import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { NextRequest, NextResponse } from "next/server";
+import { requireClientOwner } from "@/lib/auth-utils";
 import { getStripe } from "@/lib/stripe";
 import { prisma } from "@/lib/db";
 
-export async function POST(): Promise<NextResponse> {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const client = await prisma.client.findFirst({
-    where: { userId: session.user.id },
+  const clientId = (body as Record<string, unknown>)?.clientId;
+  if (!clientId || typeof clientId !== "string" || !UUID_RE.test(clientId)) {
+    return NextResponse.json({ error: "clientId is required" }, { status: 400 });
+  }
+
+  const auth = await requireClientOwner(clientId);
+  if (auth.error) return auth.error;
+
+  const client = await prisma.client.findUnique({
+    where: { id: clientId },
     select: { stripeCustomerId: true },
   });
 
@@ -32,7 +43,7 @@ export async function POST(): Promise<NextResponse> {
     const stripe = getStripe();
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: client.stripeCustomerId,
-      return_url: `${baseUrl}/dashboard`,
+      return_url: `${baseUrl}/dashboard/${clientId}`,
     });
 
     return NextResponse.json({ data: { url: portalSession.url } });
