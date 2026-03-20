@@ -3,6 +3,8 @@ import { timingSafeEqual } from "crypto";
 import { waitUntil } from "@vercel/functions";
 import { runSetupPipeline } from "@/lib/pipelines/setup";
 
+export const maxDuration = 300;
+
 /**
  * Internal endpoint to trigger the setup pipeline for a client.
  * Called by the Stripe webhook handler after creating the client record.
