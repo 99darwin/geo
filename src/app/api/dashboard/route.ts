@@ -11,11 +11,12 @@ interface DashboardData {
     id: string;
     businessName: string;
     websiteUrl: string;
-    city: string;
+    city: string | null;
     state: string | null;
     category: string | null;
     plan: string;
     onboardingStatus: string;
+    serviceArea: string | null;
   };
   visibilityScore: {
     score: number;
@@ -39,10 +40,12 @@ interface DashboardData {
   scoreHistory: { period: string; score: number }[];
   recommendations: Recommendation[];
   competitors: {
+    id: string;
     name: string;
     domain: string | null;
     citedCount: number;
     platforms: string[];
+    isAutoDetected: boolean;
   }[];
 }
 
@@ -178,6 +181,7 @@ export async function GET(
         category: client.category,
         plan: client.plan,
         onboardingStatus: client.onboardingStatus,
+        serviceArea: client.serviceArea ?? null,
       },
       visibilityScore: latestScore
         ? {
@@ -215,10 +219,12 @@ export async function GET(
       })),
       recommendations,
       competitors: competitors.map((c) => ({
+        id: c.id,
         name: c.competitorName,
         domain: c.competitorUrl,
         citedCount: c.competitorCitations.length,
         platforms: [...new Set(c.competitorCitations.map((cc) => cc.platform))],
+        isAutoDetected: c.isAutoDetected,
       })),
     };
 

@@ -103,9 +103,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   try {
     client = await prisma.client.create({
       data: {
-        businessName: extractDomainName(websiteUrl),
+        businessName: session.metadata?.businessName || extractDomainName(websiteUrl),
         websiteUrl,
-        city: "",
+        ...(session.metadata?.category && { category: session.metadata.category }),
+        ...(session.metadata?.serviceArea && { serviceArea: session.metadata.serviceArea }),
+        ...(session.metadata?.city && { city: session.metadata.city }),
+        ...(session.metadata?.state && { state: session.metadata.state }),
         plan: "starter",
         onboardingStatus: "setup_pending",
         stripeCustomerId: customerId,
@@ -126,6 +129,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   }
 
   console.log("[Stripe Webhook] Client created:", client.id);
+
+  // Create competitor records from user-provided competitors
+  const competitorsJson = session.metadata?.competitors;
+  if (competitorsJson) {
+    try {
+      const competitors = JSON.parse(competitorsJson) as string[];
+      for (const comp of competitors.slice(0, 5)) {
+        const trimmed = comp.trim().slice(0, 100);
+        if (!trimmed) continue;
+        // If it looks like a URL, store as competitorUrl
+        const isUrl = trimmed.startsWith('http') || /^[a-z0-9-]+\.[a-z]{2,}/i.test(trimmed);
+        await prisma.competitor.create({
+          data: {
+            clientId: client.id,
+            competitorName: isUrl ? trimmed.replace(/^https?:\/\//, '').replace(/\/$/, '') : trimmed,
+            competitorUrl: isUrl ? (trimmed.startsWith('http') ? trimmed : `https://${trimmed}`) : null,
+            isAutoDetected: false,
+          },
+        });
+      }
+    } catch {
+      console.warn("[Stripe Webhook] Failed to parse competitors metadata");
+    }
+  }
 
   // Dispatch setup pipeline asynchronously via waitUntil
   dispatchSetupPipeline(client.id);

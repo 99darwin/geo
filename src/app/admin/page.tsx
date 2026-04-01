@@ -14,7 +14,7 @@ interface StatsData {
   recentClients: {
     id: string;
     businessName: string;
-    city: string;
+    city: string | null;
     plan: string;
     createdAt: string;
   }[];

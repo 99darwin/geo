@@ -11,7 +11,7 @@ interface ClientItem {
   id: string;
   businessName: string;
   websiteUrl: string;
-  city: string;
+  city: string | null;
   state: string | null;
   category: string | null;
   plan: string;

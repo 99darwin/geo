@@ -1,5 +1,9 @@
+import Anthropic from "@anthropic-ai/sdk";
 import type { DetectedCompetitor } from "@/types";
 import { isBusinessMentioned } from "@/lib/engines/name-matcher";
+import { sanitizeForPrompt } from "@/lib/utils/sanitize";
+
+const CATEGORY_FILTER_TIMEOUT_MS = 10_000;
 
 interface CitationResponse {
   query: string;
@@ -99,16 +103,19 @@ function findDomainForCompetitor(
 
 /**
  * Detect competitors mentioned in AI citation responses.
- * Pure text processing — no API calls.
  *
  * Extracts business names from raw AI responses, filters out the client's own
  * business, and returns the top 5 competitors by number of query appearances.
  * Only returns competitors mentioned in 2+ distinct responses (noise reduction).
+ *
+ * When a category is provided (and is not the generic "Local Business"),
+ * uses Claude Haiku to filter out businesses from unrelated industries.
  */
-export function detectCompetitors(params: {
+export async function detectCompetitors(params: {
   businessName: string;
+  category?: string;
   citationResponses: CitationResponse[];
-}): DetectedCompetitor[] {
+}): Promise<DetectedCompetitor[]> {
   const { businessName, citationResponses } = params;
 
   // Track competitors: name (lowercased) -> aggregated data
@@ -167,7 +174,83 @@ export function detectCompetitors(params: {
     });
   }
 
-  // Sort by number of query appearances (descending), return top 5
+  // Sort by number of query appearances (descending), take top 5
   competitors.sort((a, b) => b.citedInQueries.length - a.citedInQueries.length);
-  return competitors.slice(0, 5);
+  const top = competitors.slice(0, 5);
+
+  // If we have a category, filter by industry relevance
+  if (params.category && params.category !== "Local Business" && top.length > 0) {
+    const filtered = await filterCompetitorsByCategory(top, params.category);
+    return filtered.slice(0, 5);
+  }
+
+  return top;
+}
+
+/**
+ * Use Claude Haiku to filter competitor candidates by industry relevance.
+ * Only keeps businesses that are actual competitors in the same or closely
+ * related industry as the given category.
+ *
+ * On any failure (API error, parse error, timeout), returns the original
+ * candidates unchanged (graceful degradation).
+ */
+async function filterCompetitorsByCategory(
+  candidates: DetectedCompetitor[],
+  category: string
+): Promise<DetectedCompetitor[]> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), CATEGORY_FILTER_TIMEOUT_MS);
+
+    try {
+      const client = new Anthropic();
+      const nameList = candidates.map((c) => sanitizeForPrompt(c.name, 100)).join("\n");
+      const safeCategory = sanitizeForPrompt(category, 200);
+
+      const response = await client.messages.create(
+        {
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 256,
+          messages: [
+            {
+              role: "user",
+              content: `A business in the category '${safeCategory}' has the following potential competitors detected from AI search results. Return ONLY the names that are actual competitors in the same or a closely related industry. For example, if the business is a clothing store, only return other clothing/fashion/apparel businesses — not restaurants, medical practices, etc.\n\nPotential competitors:\n${nameList}\n\nReturn as a JSON array of strings containing only the qualifying competitor names.`,
+            },
+          ],
+        },
+        { signal: controller.signal }
+      );
+
+      clearTimeout(timeout);
+
+      const textBlock = response.content.find((block) => block.type === "text");
+      if (!textBlock || textBlock.type !== "text") return candidates;
+
+      // Extract JSON array from the response (may be wrapped in markdown code fences)
+      const jsonMatch = textBlock.text.match(/\[[\s\S]*\]/);
+      if (!jsonMatch) return candidates;
+
+      const parsed: unknown = JSON.parse(jsonMatch[0]);
+      if (!Array.isArray(parsed)) return candidates;
+
+      const approvedNames = new Set(
+        parsed
+          .filter((item): item is string => typeof item === "string")
+          .map((name) => name.toLowerCase().trim())
+      );
+
+      const filtered = candidates.filter((c) =>
+        approvedNames.has(c.name.toLowerCase().trim())
+      );
+
+      // If filtering removed everything, return originals (likely a false negative)
+      return filtered.length > 0 ? filtered : candidates;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch {
+    // Graceful degradation: return unfiltered candidates on any failure
+    return candidates;
+  }
 }

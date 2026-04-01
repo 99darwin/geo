@@ -7,10 +7,10 @@ interface ScoreGaugeProps {
   size?: number;
 }
 
-function getScoreColor(score: number): string {
-  if (score <= 30) return '#ef4444'; // red-500
-  if (score <= 60) return '#eab308'; // yellow-500
-  return '#22c55e'; // green-500
+function getScoreColorClass(score: number): string {
+  if (score <= 30) return 'text-red-500';
+  if (score <= 60) return 'text-yellow-500';
+  return 'text-green-500';
 }
 
 function getScoreLabel(score: number): string {
@@ -47,12 +47,12 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = (animatedScore / 100) * circumference;
-  const color = getScoreColor(score);
+  const colorClass = getScoreColorClass(score);
   const center = size / 2;
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="relative" style={{ width: size, height: size }}>
+      <div className={`relative ${colorClass}`} style={{ width: size, height: size }}>
       <svg
         width={size}
         height={size}
@@ -66,7 +66,7 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
           cy={center}
           r={radius}
           fill="none"
-          stroke="#e5e7eb"
+          className="stroke-gray-200 dark:stroke-gray-700"
           strokeWidth={strokeWidth}
         />
         {/* Progress arc */}
@@ -75,7 +75,7 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
           cy={center}
           r={radius}
           fill="none"
-          stroke={color}
+          stroke="currentColor"
           strokeWidth={strokeWidth}
           strokeDasharray={circumference}
           strokeDashoffset={circumference - progress}
@@ -88,10 +88,10 @@ export function ScoreGauge({ score, size = 160 }: ScoreGaugeProps) {
         className="absolute inset-0 flex flex-col items-center justify-center"
         aria-hidden="true"
       >
-        <span className="font-bold text-gray-900" style={{ fontSize: size * 0.225 }}>
+        <span className="font-bold text-gray-900 dark:text-gray-100" style={{ fontSize: size * 0.225 }}>
           {animatedScore}
         </span>
-        <span className="text-gray-500" style={{ fontSize: size * 0.09 }}>{getScoreLabel(score)}</span>
+        <span className="text-gray-500 dark:text-gray-400" style={{ fontSize: size * 0.09 }}>{getScoreLabel(score)}</span>
       </div>
       </div>
     </div>

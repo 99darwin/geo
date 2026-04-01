@@ -7,6 +7,12 @@ import { rateLimit } from "@/lib/rate-limit";
 
 const checkoutSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
+  businessName: z.string().max(200).optional(),
+  category: z.string().max(200).optional(),
+  serviceArea: z.enum(["local", "regional", "national", "global"]).optional(),
+  city: z.string().max(100).optional(),
+  state: z.string().max(50).optional(),
+  competitors: z.array(z.string().max(200)).max(5).optional(),
 });
 
 const checkoutRateLimit = rateLimit({
@@ -43,7 +49,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
 
-  const { url } = parsed.data;
+  const { url, businessName, category, serviceArea, city, state, competitors } = parsed.data;
   const baseUrl = process.env.NEXTAUTH_URL;
   if (!baseUrl) {
     console.error("[Checkout] NEXTAUTH_URL is not set");
@@ -69,6 +75,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       metadata: {
         userId: session.user.id,
         websiteUrl: url,
+        ...(businessName && { businessName }),
+        ...(category && { category }),
+        ...(serviceArea && { serviceArea }),
+        ...(city && { city }),
+        ...(state && { state }),
+        ...(competitors?.length && { competitors: JSON.stringify(competitors).slice(0, 500) }),
       },
       line_items: [
         { price: monthlyPriceId, quantity: 1 },
@@ -78,6 +90,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         metadata: {
           userId: session.user.id,
           websiteUrl: url,
+          ...(businessName && { businessName }),
+          ...(category && { category }),
+          ...(serviceArea && { serviceArea }),
+          ...(city && { city }),
+          ...(state && { state }),
+          ...(competitors?.length && { competitors: JSON.stringify(competitors).slice(0, 500) }),
         },
       },
       allow_promotion_codes: true,

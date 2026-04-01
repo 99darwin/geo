@@ -111,11 +111,12 @@ model Client {
   id                    String           @id @default(uuid())
   businessName          String
   websiteUrl            String
-  city                  String
+  city                  String?
   state                 String?
   phone                 String?
   address               String?
   category              String?
+  serviceArea           String?          @default("local")
   services              String[]
   hours                 String?
   googleBusinessUrl     String?
