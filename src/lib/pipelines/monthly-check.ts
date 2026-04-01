@@ -147,7 +147,7 @@ export async function runMonthlyCheck(clientId: string, options?: { force?: bool
 
   // Update client — only fill in fields that are currently empty/junk.
   // Never overwrite user-edited values (profile editor sets real names/categories).
-  const isUrlLikeName = (name: string) => /^https?:\/\/|\.com|\.org|\.net/i.test(name);
+  const isUrlLikeName = (name: string) => /^https?:\/\/|^www\.|\.com\b|\.org\b|\.net\b/i.test(name);
   const PLACEHOLDERS = new Set(["unknown", "n/a", "none", "null", "undefined", ""]);
   const isPlaceholder = (val: string | null | undefined) => !val || PLACEHOLDERS.has(val.trim().toLowerCase());
   const updateData: Record<string, unknown> = {};
