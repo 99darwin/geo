@@ -4,8 +4,9 @@ import { checkCitations } from "@/lib/engines/citation-checker";
 import { extractSources } from "@/lib/engines/source-extractor";
 import { calculateVisibilityScore } from "@/lib/engines/scoring";
 import { auditRobotsTxt } from "@/lib/engines/robots-auditor";
-import { generateLlmsTxt } from "@/lib/engines/generators/llms-txt";
+import { generateLlmsTxt, generateEnrichedAbout, isLlmsTxtQualitySufficient } from "@/lib/engines/generators/llms-txt";
 import { generateSchemaScript } from "@/lib/engines/generators/schema-jsonld";
+import { enrichBusinessInfo } from "@/lib/engines/business-enricher";
 import { checkNap } from "@/lib/engines/nap-checker";
 import { pullReviews } from "@/lib/engines/review-puller";
 import { detectCompetitors } from "@/lib/engines/competitor-detector";
@@ -126,24 +127,80 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   console.log("[Monthly Check] Crawling:", client.websiteUrl);
   const crawlResult = await crawlSite(client.websiteUrl);
 
-  await prisma.client.update({
-    where: { id: clientId },
-    data: {
-      businessName: crawlResult.businessName || client.businessName,
-      city: crawlResult.city || client.city,
-      state: crawlResult.state || client.state,
-      phone: crawlResult.phone || client.phone,
-      address: crawlResult.address || client.address,
-      category: crawlResult.category || client.category,
-      services: crawlResult.services.length > 0 ? crawlResult.services : client.services,
-      hours: crawlResult.hours || client.hours,
-    },
-  });
+  // Step 3.5: AI enrichment when crawl data is sparse (same as setup pipeline)
+  let enriched: Awaited<ReturnType<typeof enrichBusinessInfo>> | null = null;
+  const hasSparseData =
+    !crawlResult.businessName ||
+    /^https?:\/\//.test(client.businessName) ||
+    (!crawlResult.category && !client.category);
+
+  if (hasSparseData && crawlResult.rawContent) {
+    console.log("[Monthly Check] Crawl data sparse, running AI enrichment");
+    enriched = await enrichBusinessInfo({
+      url: client.websiteUrl,
+      rawContent: crawlResult.rawContent,
+    });
+  }
+
+  // Update client — only fill in fields that are currently empty/junk.
+  // Never overwrite user-edited values (profile editor sets real names/categories).
+  const isUrlLikeName = (name: string) => /^https?:\/\/|\.com|\.org|\.net/i.test(name);
+  const updateData: Record<string, unknown> = {};
+
+  // Only update businessName if current value looks like a URL/domain
+  if (isUrlLikeName(client.businessName)) {
+    updateData.businessName =
+      crawlResult.businessName && !isUrlLikeName(crawlResult.businessName)
+        ? crawlResult.businessName
+        : enriched?.businessName ?? client.businessName;
+  }
+
+  // Only backfill nullable fields if currently empty
+  if (!client.city) updateData.city = crawlResult.city || enriched?.city || null;
+  if (!client.state) updateData.state = crawlResult.state || enriched?.state || null;
+  if (!client.phone) updateData.phone = crawlResult.phone || null;
+  if (!client.address) updateData.address = crawlResult.address || null;
+  if (!client.category) updateData.category = crawlResult.category || enriched?.category || null;
+  if (client.services.length === 0 && crawlResult.services.length > 0) {
+    updateData.services = crawlResult.services;
+  } else if (client.services.length === 0 && enriched?.services?.length) {
+    updateData.services = enriched.services;
+  }
+  if (!client.hours) updateData.hours = crawlResult.hours || null;
+  if (!client.serviceArea && enriched?.serviceArea) {
+    updateData.serviceArea = enriched.serviceArea;
+  }
+
+  if (Object.keys(updateData).length > 0) {
+    await prisma.client.update({
+      where: { id: clientId },
+      data: updateData,
+    });
+  }
 
   const updatedClient = await prisma.client.findUniqueOrThrow({ where: { id: clientId } });
 
   // Step 4: Conditionally regenerate files
   let filesRegenerated = false;
+
+  // If llms.txt quality is insufficient, try AI-enriched about
+  let enrichedAbout: string | undefined;
+  if (
+    !isLlmsTxtQualitySufficient(
+      { businessName: updatedClient.businessName, city: updatedClient.city ?? undefined, services: updatedClient.services },
+      { about: crawlResult.about ?? undefined }
+    ) &&
+    crawlResult.rawContent
+  ) {
+    console.log("[Monthly Check] llms.txt quality insufficient, generating enriched about");
+    enrichedAbout = await generateEnrichedAbout({
+      businessName: updatedClient.businessName,
+      category: updatedClient.category ?? undefined,
+      services: updatedClient.services,
+      rawContent: crawlResult.rawContent,
+      websiteUrl: updatedClient.websiteUrl,
+    });
+  }
 
   const newLlmsTxt = generateLlmsTxt(
     {
@@ -156,10 +213,11 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
       services: updatedClient.services,
       hours: updatedClient.hours ?? undefined,
       websiteUrl: updatedClient.websiteUrl,
+      serviceArea: updatedClient.serviceArea ?? undefined,
     },
     {
       description: crawlResult.description ?? undefined,
-      about: crawlResult.about ?? undefined,
+      about: enrichedAbout || crawlResult.about || undefined,
       keyPages: crawlResult.keyPages,
     }
   );
