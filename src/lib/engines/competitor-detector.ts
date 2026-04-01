@@ -13,10 +13,100 @@ interface CitationResponse {
 }
 
 /**
+ * Common non-business strings that regex patterns pick up from AI responses.
+ * Includes structured data field names, HTTP errors, and generic phrases.
+ */
+const NON_BUSINESS_NAMES = new Set([
+  "rating",
+  "ratings",
+  "description",
+  "address",
+  "phone",
+  "hours",
+  "website",
+  "reviews",
+  "review",
+  "location",
+  "directions",
+  "menu",
+  "price",
+  "prices",
+  "pricing",
+  "category",
+  "categories",
+  "summary",
+  "overview",
+  "about",
+  "contact",
+  "features",
+  "services",
+  "products",
+  "disclaimer",
+  "too many requests",
+  "not found",
+  "internal server error",
+  "bad gateway",
+  "service unavailable",
+  "access denied",
+  "forbidden",
+  "unauthorized",
+  "error",
+  "unknown",
+  "none",
+  "null",
+  "undefined",
+  "based on",
+  "according to",
+  "note that",
+  "keep in mind",
+  "important note",
+  "please note",
+  "in conclusion",
+  "top picks",
+  "best options",
+  "here are some",
+  "google maps",
+  "yelp reviews",
+  "trip advisor",
+]);
+
+/**
+ * Check if a string looks like a real business name vs noise.
+ */
+function isLikelyBusinessName(name: string): boolean {
+  const lower = name.toLowerCase().trim();
+
+  // Reject known non-business strings
+  if (NON_BUSINESS_NAMES.has(lower)) return false;
+
+  // Reject if it's a single common English word (< 2 words, and in blocklist)
+  if (!/\s/.test(lower) && NON_BUSINESS_NAMES.has(lower)) return false;
+
+  // Reject strings that are all numbers or all punctuation
+  if (/^[\d\s.,]+$/.test(name)) return false;
+  if (/^[\W\s]+$/.test(name)) return false;
+
+  // Reject HTTP status-like patterns
+  if (/^\d{3}\s/.test(name.trim())) return false;
+
+  // Reject strings with URLs or email-like patterns
+  if (/https?:|www\.|@/.test(name)) return false;
+
+  return true;
+}
+
+/**
  * Extract potential business names from AI response text.
  * Looks for bold markdown, numbered/bulleted list items, and capitalized word sequences.
+ * Filters out common noise like structured data fields and HTTP errors.
  */
 function extractBusinessNames(text: string): string[] {
+  // Skip responses that look like HTTP errors or empty content
+  if (/^(\d{3}\s)?(Too Many Requests|Not Found|Internal Server Error|Bad Gateway|Service Unavailable)/i.test(text.trim())) {
+    return [];
+  }
+  if (text.trim().length < 50) return [];
+
   const names = new Set<string>();
 
   // Pattern 1: Bold markdown — **Name** or __Name__
@@ -24,7 +114,7 @@ function extractBusinessNames(text: string): string[] {
   let match: RegExpExecArray | null;
   while ((match = boldPattern.exec(text)) !== null) {
     const name = (match[1] || match[2]).trim();
-    if (name.length >= 3 && name.length <= 60) {
+    if (name.length >= 3 && name.length <= 60 && isLikelyBusinessName(name)) {
       names.add(name);
     }
   }
@@ -35,7 +125,7 @@ function extractBusinessNames(text: string): string[] {
     const name = match[1].trim();
     // Take only the first few words (business names are typically short)
     const words = name.split(/\s+/).slice(0, 5).join(" ");
-    if (words.length >= 3 && words.length <= 60) {
+    if (words.length >= 3 && words.length <= 60 && isLikelyBusinessName(words)) {
       names.add(words);
     }
   }
@@ -62,7 +152,8 @@ function extractBusinessNames(text: string): string[] {
     if (
       name.length >= 5 &&
       name.length <= 60 &&
-      !genericPhrases.has(name.toLowerCase())
+      !genericPhrases.has(name.toLowerCase()) &&
+      isLikelyBusinessName(name)
     ) {
       names.add(name);
     }
