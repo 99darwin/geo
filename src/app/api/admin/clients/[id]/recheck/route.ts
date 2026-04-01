@@ -4,8 +4,6 @@ import { prisma } from "@/lib/db";
 import { runMonthlyCheck } from "@/lib/pipelines/monthly-check";
 import type { ApiResponse } from "@/types";
 
-const COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes per client
-
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -17,7 +15,7 @@ export async function POST(
 
   const client = await prisma.client.findUnique({
     where: { id },
-    select: { onboardingStatus: true, plan: true, lastRecheckAt: true },
+    select: { onboardingStatus: true, plan: true },
   });
 
   if (!client) {
@@ -31,28 +29,11 @@ export async function POST(
     return NextResponse.json({ error: "Client not eligible for recheck" }, { status: 400 });
   }
 
-  // Atomic cooldown: only update if expired or never set
-  const cooldownThreshold = new Date(Date.now() - COOLDOWN_MS);
-  const updated = await prisma.client.updateMany({
-    where: {
-      id,
-      OR: [
-        { lastRecheckAt: null },
-        { lastRecheckAt: { lt: cooldownThreshold } },
-      ],
-    },
+  // Admin: no cooldown — update timestamp for bookkeeping only
+  await prisma.client.update({
+    where: { id },
     data: { lastRecheckAt: new Date() },
   });
-
-  if (updated.count === 0) {
-    const waitSec = client.lastRecheckAt
-      ? Math.max(0, Math.ceil((COOLDOWN_MS - (Date.now() - client.lastRecheckAt.getTime())) / 1000))
-      : 0;
-    return NextResponse.json(
-      { error: `Please wait ${waitSec}s before triggering again.` },
-      { status: 429 }
-    );
-  }
 
   // Run in background — don't block the response
   const promise = runMonthlyCheck(id).catch((err) => {

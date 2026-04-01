@@ -30,6 +30,8 @@ export async function POST(
   const auth = await requireClientOwner(clientId);
   if (auth.error) return auth.error;
 
+  const isAdmin = auth.session.user.role === "admin";
+
   const client = await prisma.client.findUnique({
     where: { id: clientId },
     select: { onboardingStatus: true, plan: true, lastRecheckAt: true },
@@ -49,35 +51,43 @@ export async function POST(
     );
   }
 
-  // Atomic cooldown: only update if expired or never set
-  const cooldownThreshold = new Date(Date.now() - COOLDOWN_MS);
-  const updated = await prisma.client.updateMany({
-    where: {
-      id: clientId,
-      OR: [
-        { lastRecheckAt: null },
-        { lastRecheckAt: { lt: cooldownThreshold } },
-      ],
-    },
-    data: { lastRecheckAt: new Date() },
-  });
+  if (isAdmin) {
+    // Admin: no cooldown — update timestamp for bookkeeping only
+    await prisma.client.update({
+      where: { id: clientId },
+      data: { lastRecheckAt: new Date() },
+    });
+  } else {
+    // Regular user: enforce cooldown
+    const cooldownThreshold = new Date(Date.now() - COOLDOWN_MS);
+    const updated = await prisma.client.updateMany({
+      where: {
+        id: clientId,
+        OR: [
+          { lastRecheckAt: null },
+          { lastRecheckAt: { lt: cooldownThreshold } },
+        ],
+      },
+      data: { lastRecheckAt: new Date() },
+    });
 
-  if (updated.count === 0) {
-    const waitSec = client.lastRecheckAt
-      ? Math.max(
-          0,
-          Math.ceil(
-            (COOLDOWN_MS - (Date.now() - client.lastRecheckAt.getTime())) / 1000
+    if (updated.count === 0) {
+      const waitSec = client.lastRecheckAt
+        ? Math.max(
+            0,
+            Math.ceil(
+              (COOLDOWN_MS - (Date.now() - client.lastRecheckAt.getTime())) / 1000
+            )
           )
-        )
-      : 0;
-    const message = waitSec > 0
-      ? `Please wait ${waitSec}s before triggering again.`
-      : "Report already queued. Please wait a few minutes.";
-    return NextResponse.json(
-      { error: message },
-      { status: 429 }
-    );
+        : 0;
+      const message = waitSec > 0
+        ? `Please wait ${waitSec}s before triggering again.`
+        : "Report already queued. Please wait a few minutes.";
+      return NextResponse.json(
+        { error: message },
+        { status: 429 }
+      );
+    }
   }
 
   // Run in background — don't block the response
