@@ -149,7 +149,7 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
     {
       businessName: updatedClient.businessName,
       category: updatedClient.category ?? undefined,
-      city: updatedClient.city,
+      city: updatedClient.city ?? undefined,
       state: updatedClient.state ?? undefined,
       phone: updatedClient.phone ?? undefined,
       address: updatedClient.address ?? undefined,
@@ -167,7 +167,7 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   const newSchemaScript = generateSchemaScript({
     businessName: updatedClient.businessName,
     address: updatedClient.address ?? undefined,
-    city: updatedClient.city,
+    city: updatedClient.city ?? "",
     state: updatedClient.state ?? undefined,
     phone: updatedClient.phone ?? undefined,
     websiteUrl: updatedClient.websiteUrl,
@@ -311,26 +311,33 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   }
 
   // Step 9: NAP check + review pull (graceful failure)
-  console.log("[Monthly Check] Running NAP check + review pull");
-  const [napResult, reviewResult] = await Promise.allSettled([
-    checkNap({
+  const isLocal = updatedClient.serviceArea === "local" || !updatedClient.serviceArea;
+  console.log("[Monthly Check] Running", isLocal ? "NAP check + " : "", "review pull");
+
+  const settledPromises = await Promise.allSettled([
+    ...(isLocal ? [checkNap({
       businessName: updatedClient.businessName,
       address: updatedClient.address ?? undefined,
       phone: updatedClient.phone ?? undefined,
-      city: updatedClient.city,
+      city: updatedClient.city ?? "",
       state: updatedClient.state ?? undefined,
-    }),
+    })] : []),
     pullReviews({
       businessName: updatedClient.businessName,
-      city: updatedClient.city,
+      city: updatedClient.city ?? "",
       state: updatedClient.state ?? undefined,
     }),
   ]);
 
+  // Adjust result indices based on whether NAP was included
+  const napResult = isLocal ? settledPromises[0] : null;
+  const reviewResult = isLocal ? settledPromises[1] : settledPromises[0];
+
   // Store NAP results
-  if (napResult.status === "fulfilled") {
+  if (napResult?.status === "fulfilled") {
+    const napValues = napResult.value as Awaited<ReturnType<typeof checkNap>>;
     await Promise.all(
-      napResult.value.map(async (nap) => {
+      napValues.map(async (nap) => {
         const existing = await prisma.napAudit.findFirst({
           where: { clientId, platform: nap.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook" },
           orderBy: { checkedAt: "desc" },
@@ -350,14 +357,15 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
         });
       })
     );
-  } else {
+  } else if (napResult?.status === "rejected") {
     console.warn("[Monthly Check] NAP check failed:", napResult.reason);
   }
 
   // Store review snapshots
-  if (reviewResult.status === "fulfilled") {
+  if (reviewResult?.status === "fulfilled") {
+    const reviewValues = reviewResult.value as Awaited<ReturnType<typeof pullReviews>>;
     await Promise.all(
-      reviewResult.value.map(async (review) => {
+      reviewValues.map(async (review) => {
         const existing = await prisma.reviewSnapshot.findFirst({
           where: { clientId, platform: review.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook" },
           orderBy: { checkedAt: "desc" },
@@ -374,7 +382,7 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
         });
       })
     );
-  } else {
+  } else if (reviewResult?.status === "rejected") {
     console.warn("[Monthly Check] Review pull failed:", reviewResult.reason);
   }
 
@@ -383,6 +391,7 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
   if (citationResponses.length > 0) {
     const detectedCompetitors = await detectCompetitors({
       businessName: updatedClient.businessName,
+      category: updatedClient.category ?? undefined,
       citationResponses,
     });
 

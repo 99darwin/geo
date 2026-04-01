@@ -18,7 +18,7 @@ interface ClientDetail {
   id: string;
   businessName: string;
   websiteUrl: string;
-  city: string;
+  city: string | null;
   state: string | null;
   phone: string | null;
   address: string | null;

@@ -7,6 +7,7 @@ import type {
 } from "@/types";
 import type { AiPlatform } from "@/types/platforms";
 import { withTimeout, normalizeDomain } from "@/lib/utils";
+import { sanitizeForPrompt } from "@/lib/utils/sanitize";
 import { isBusinessMentioned } from "@/lib/engines/name-matcher";
 
 const FREE_SCAN_PLATFORMS: AiPlatform[] = ["chatgpt", "perplexity"];
@@ -15,19 +16,6 @@ const QUERY_GEN_TIMEOUT_MS = 10_000;
 const CITATION_TIMEOUT_MS = 12_000;
 const TOTAL_TIMEOUT_MS = 45_000;
 const MAX_QUERY_LENGTH = 200;
-
-/**
- * Sanitize untrusted text before interpolating into LLM prompts.
- * Strips characters used for prompt structure (angle brackets, backticks)
- * and truncates to a safe length.
- */
-function sanitizeForPrompt(text: string, maxLength: number = 500): string {
-  return text
-    .replace(/[<>`"]/g, "")
-    .replace(/\r?\n/g, " ")
-    .trim()
-    .slice(0, maxLength);
-}
 
 /**
  * Validate that a generated query looks like a normal search query,
@@ -452,8 +440,11 @@ function inferSentiment(
 
 function detectCompetitor(
   results: { platform: string; rawResponse: string }[],
-  businessName: string
+  businessName: string,
+  _category?: string
 ): { name: string; url: string | null } | null {
+  // TODO: Use _category to filter out competitors from unrelated industries
+  // (similar to the engine's filterCompetitorsByCategory in competitor-detector.ts)
   const businessLower = businessName.toLowerCase();
 
   // Regex to find numbered list items with business-like names
@@ -639,7 +630,7 @@ export async function runFreeScan(url: string): Promise<ScanResult> {
       .slice(0, 10);
 
     // Step 7: Detect competitor
-    const competitor = detectCompetitor(rawResponses, businessName);
+    const competitor = detectCompetitor(rawResponses, businessName, category);
 
     // Step 8: Calculate score (setupComplete = false for free scan)
     const breakdown = calculateScore(queryResults, false);

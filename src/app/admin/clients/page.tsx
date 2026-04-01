@@ -9,7 +9,7 @@ import { PLAN_LABELS, STATUS_LABELS } from '@/lib/admin-constants';
 interface ClientItem {
   id: string;
   businessName: string;
-  city: string;
+  city: string | null;
   state: string | null;
   plan: string;
   onboardingStatus: string;

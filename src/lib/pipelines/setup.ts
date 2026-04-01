@@ -5,11 +5,13 @@ import { checkCitations } from "@/lib/engines/citation-checker";
 import { extractSources } from "@/lib/engines/source-extractor";
 import { calculateVisibilityScore } from "@/lib/engines/scoring";
 import { auditRobotsTxt } from "@/lib/engines/robots-auditor";
-import { generateLlmsTxt } from "@/lib/engines/generators/llms-txt";
+import { generateLlmsTxt, generateEnrichedAbout, isLlmsTxtQualitySufficient } from "@/lib/engines/generators/llms-txt";
 import { generateSchemaScript } from "@/lib/engines/generators/schema-jsonld";
 import { checkNap } from "@/lib/engines/nap-checker";
 import { pullReviews } from "@/lib/engines/review-puller";
 import { detectCompetitors } from "@/lib/engines/competitor-detector";
+import { enrichBusinessInfo } from "@/lib/engines/business-enricher";
+import { isBusinessMentioned } from "@/lib/engines/name-matcher";
 import { isBlockedUrl } from "@/lib/url-validation";
 import type { AiPlatform } from "@/types/platforms";
 
@@ -95,18 +97,43 @@ async function executeSetupSteps(clientId: string): Promise<void> {
   console.log("[Setup Pipeline] Crawling:", client.websiteUrl);
   const crawlResult = await crawlSite(client.websiteUrl);
 
-  // Step 3: Update client with crawled data
+  // Step 2.5: AI enrichment if crawl data is sparse
+  let enrichedData: { businessName?: string; category?: string; city?: string; state?: string; services?: string[]; about?: string; serviceArea?: string } = {};
+  if (!crawlResult.category || !crawlResult.city || crawlResult.services.length === 0 || !crawlResult.about) {
+    console.log("[Setup Pipeline] Crawl data sparse, running AI enrichment");
+    try {
+      const enriched = await enrichBusinessInfo({ rawContent: crawlResult.rawContent, url: client.websiteUrl });
+      enrichedData = {
+        businessName: enriched.businessName,
+        category: enriched.category,
+        city: enriched.city ?? undefined,
+        state: enriched.state ?? undefined,
+        services: enriched.services,
+        about: enriched.about,
+        serviceArea: enriched.serviceArea,
+      };
+    } catch (err) {
+      console.warn("[Setup Pipeline] AI enrichment failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Step 3: Update client with crawled data (priority: user-provided > crawl > enriched > existing)
+  // Business name: if it looks like a domain (no spaces), prefer crawl/enriched over it
+  const isLikelyDomainName = !client.businessName.includes(" ");
   await prisma.client.update({
     where: { id: clientId },
     data: {
-      businessName: crawlResult.businessName || client.businessName,
-      city: crawlResult.city || client.city,
-      state: crawlResult.state || client.state,
+      businessName: isLikelyDomainName
+        ? (crawlResult.businessName || enrichedData.businessName || client.businessName)
+        : client.businessName,
+      city: client.city || crawlResult.city || enrichedData.city || null,
+      state: client.state || crawlResult.state || enrichedData.state || null,
       phone: crawlResult.phone || client.phone,
       address: crawlResult.address || client.address,
-      category: crawlResult.category || client.category,
-      services: crawlResult.services.length > 0 ? crawlResult.services : client.services,
+      category: client.category || crawlResult.category || enrichedData.category || null,
+      services: client.services.length > 0 ? client.services : (crawlResult.services.length > 0 ? crawlResult.services : (enrichedData.services || [])),
       hours: crawlResult.hours || client.hours,
+      serviceArea: client.serviceArea || enrichedData.serviceArea || "local",
     },
   });
 
@@ -114,23 +141,45 @@ async function executeSetupSteps(clientId: string): Promise<void> {
 
   // Step 4: Generate llms.txt
   console.log("[Setup Pipeline] Generating llms.txt");
+  const crawlDataForLlms = {
+    description: crawlResult.description ?? undefined,
+    about: crawlResult.about || enrichedData.about || undefined,
+    keyPages: crawlResult.keyPages,
+  };
+
+  // Use AI-enhanced about if quality is insufficient
+  if (!isLlmsTxtQualitySufficient(
+    { businessName: updatedClient.businessName, city: updatedClient.city ?? undefined, services: updatedClient.services },
+    { about: crawlDataForLlms.about }
+  ) && crawlResult.rawContent) {
+    try {
+      const enrichedAbout = await generateEnrichedAbout({
+        businessName: updatedClient.businessName,
+        category: updatedClient.category ?? undefined,
+        services: updatedClient.services,
+        rawContent: crawlResult.rawContent,
+        websiteUrl: updatedClient.websiteUrl,
+      });
+      crawlDataForLlms.about = enrichedAbout;
+    } catch (err) {
+      console.warn("[Setup Pipeline] AI about generation failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
   const llmsTxt = generateLlmsTxt(
     {
       businessName: updatedClient.businessName,
       category: updatedClient.category ?? undefined,
-      city: updatedClient.city,
+      city: updatedClient.city ?? undefined,
       state: updatedClient.state ?? undefined,
       phone: updatedClient.phone ?? undefined,
       address: updatedClient.address ?? undefined,
       services: updatedClient.services,
       hours: updatedClient.hours ?? undefined,
       websiteUrl: updatedClient.websiteUrl,
+      serviceArea: updatedClient.serviceArea ?? undefined,
     },
-    {
-      description: crawlResult.description ?? undefined,
-      about: crawlResult.about ?? undefined,
-      keyPages: crawlResult.keyPages,
-    }
+    crawlDataForLlms
   );
 
   await prisma.generatedFile.create({
@@ -148,7 +197,7 @@ async function executeSetupSteps(clientId: string): Promise<void> {
   const schemaScript = generateSchemaScript({
     businessName: updatedClient.businessName,
     address: updatedClient.address ?? undefined,
-    city: updatedClient.city,
+    city: updatedClient.city ?? "",
     state: updatedClient.state ?? undefined,
     phone: updatedClient.phone ?? undefined,
     websiteUrl: updatedClient.websiteUrl,
@@ -179,8 +228,9 @@ async function executeSetupSteps(clientId: string): Promise<void> {
   console.log("[Setup Pipeline] Generating queries");
   const queries = await generateQueries({
     category: updatedClient.category || "Local Business",
-    city: updatedClient.city || "the area",
+    city: updatedClient.city || undefined,
     services: updatedClient.services,
+    serviceArea: (updatedClient.serviceArea as "local" | "regional" | "national" | "global") || "local",
     count: 12,
   });
 
@@ -292,24 +342,31 @@ async function executeSetupSteps(clientId: string): Promise<void> {
   // Steps 10-12: NAP audit, review snapshot, competitor detection
   console.log("[Setup Pipeline] Running NAP audit, reviews, competitor detection");
 
-  const [napResult, reviewResult] = await Promise.allSettled([
-    checkNap({
+  const isLocal = updatedClient.serviceArea === "local" || !updatedClient.serviceArea;
+
+  const settledPromises = await Promise.allSettled([
+    ...(isLocal ? [checkNap({
       businessName: updatedClient.businessName,
       address: updatedClient.address ?? undefined,
       phone: updatedClient.phone ?? undefined,
-      city: updatedClient.city,
+      city: updatedClient.city ?? "",
       state: updatedClient.state ?? undefined,
-    }),
+    })] : []),
     pullReviews({
       businessName: updatedClient.businessName,
-      city: updatedClient.city,
+      city: updatedClient.city ?? "",
       state: updatedClient.state ?? undefined,
     }),
   ]);
 
-  if (napResult.status === "fulfilled" && napResult.value.length > 0) {
+  // Adjust result indices based on whether NAP was included
+  const napResult = isLocal ? settledPromises[0] : null;
+  const reviewResult = isLocal ? settledPromises[1] : settledPromises[0];
+
+  if (napResult?.status === "fulfilled" && (napResult.value as Awaited<ReturnType<typeof checkNap>>).length > 0) {
+    const napValues = napResult.value as Awaited<ReturnType<typeof checkNap>>;
     await prisma.napAudit.createMany({
-      data: napResult.value.map((r) => ({
+      data: napValues.map((r) => ({
         clientId,
         platform: r.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
         nameMatch: r.nameMatch,
@@ -321,15 +378,18 @@ async function executeSetupSteps(clientId: string): Promise<void> {
     });
   }
 
-  if (reviewResult.status === "fulfilled" && reviewResult.value.length > 0) {
-    await prisma.reviewSnapshot.createMany({
-      data: reviewResult.value.map((r) => ({
-        clientId,
-        platform: r.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
-        rating: r.rating,
-        reviewCount: r.reviewCount,
-      })),
-    });
+  if (reviewResult?.status === "fulfilled") {
+    const reviewValues = reviewResult.value as Awaited<ReturnType<typeof pullReviews>>;
+    if (reviewValues.length > 0) {
+      await prisma.reviewSnapshot.createMany({
+        data: reviewValues.map((r) => ({
+          clientId,
+          platform: r.platform as "google" | "yelp" | "foursquare" | "bing" | "apple_maps" | "facebook",
+          rating: r.rating,
+          reviewCount: r.reviewCount,
+        })),
+      });
+    }
   }
 
   // Competitor detection from citation responses
@@ -345,20 +405,34 @@ async function executeSetupSteps(clientId: string): Promise<void> {
         }))
   );
 
-  const detectedCompetitors = await detectCompetitors({
-    businessName: updatedClient.businessName,
-    citationResponses: citationResponsesForDetection,
+  const manualCompetitors = await prisma.competitor.findMany({
+    where: { clientId, isAutoDetected: false },
   });
 
-  for (const comp of detectedCompetitors.slice(0, 5)) {
-    await prisma.competitor.create({
-      data: {
-        clientId,
-        competitorName: comp.name,
-        competitorUrl: comp.domain ? `https://${comp.domain}` : null,
-        isAutoDetected: true,
-      },
+  if (manualCompetitors.length < 3 && citationResponsesForDetection.length > 0) {
+    const detectedCompetitors = await detectCompetitors({
+      businessName: updatedClient.businessName,
+      category: updatedClient.category ?? undefined,
+      citationResponses: citationResponsesForDetection,
     });
+
+    for (const comp of detectedCompetitors.slice(0, 5)) {
+      const isDuplicate = manualCompetitors.some(mc =>
+        isBusinessMentioned(comp.name, mc.competitorName).cited
+      );
+      if (isDuplicate) continue;
+
+      await prisma.competitor.create({
+        data: {
+          clientId,
+          competitorName: comp.name,
+          competitorUrl: comp.domain ? `https://${comp.domain}` : null,
+          isAutoDetected: true,
+        },
+      });
+    }
+  } else if (manualCompetitors.length >= 3) {
+    console.log("[Setup Pipeline] Skipping auto-detection — user provided 3+ competitors");
   }
 
   // Step 14: Compute visibility score (upsert to handle retries)
@@ -416,9 +490,9 @@ async function cleanupPreviousRun(clientId: string): Promise<void> {
 
   // Delete in dependency order: competitor citations reference competitors and queries
   await prisma.competitorCitation.deleteMany({
-    where: { competitor: { clientId } },
+    where: { competitor: { clientId, isAutoDetected: true } },
   });
-  await prisma.competitor.deleteMany({ where: { clientId } });
+  await prisma.competitor.deleteMany({ where: { clientId, isAutoDetected: true } });
   await prisma.napAudit.deleteMany({ where: { clientId } });
   await prisma.reviewSnapshot.deleteMany({ where: { clientId } });
   await prisma.citation.deleteMany({ where: { clientId } });

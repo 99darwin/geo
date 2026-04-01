@@ -6,7 +6,7 @@ import type { ApiResponse } from "@/types";
 interface ClientListItem {
   id: string;
   businessName: string;
-  city: string;
+  city: string | null;
   state: string | null;
   plan: string;
   onboardingStatus: string;

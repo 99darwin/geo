@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScoreGauge } from '@/components/ui/score-gauge';
 import { ScoreChart } from '@/components/ui/score-chart';
 import { PLATFORM_LABELS } from '@/lib/constants';
@@ -18,10 +19,12 @@ interface Recommendation {
 }
 
 interface CompetitorData {
+  id?: string;
   name: string;
   domain: string | null;
   citedCount: number;
   platforms: string[];
+  isAutoDetected?: boolean;
 }
 
 interface DashboardData {
@@ -29,7 +32,7 @@ interface DashboardData {
     id: string;
     businessName: string;
     websiteUrl: string;
-    city: string;
+    city: string | null;
     state: string | null;
     category: string | null;
     plan: string;
@@ -172,7 +175,7 @@ function FreeScanState({ clientId, websiteUrl, data }: { clientId: string; websi
         href="/dashboard"
         className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
       >
-        &larr; All Businesses
+        <span aria-hidden="true">&larr;</span> All Businesses
       </Link>
 
       <h1 className="text-2xl font-bold text-gray-900">{data.client.businessName}</h1>
@@ -231,24 +234,130 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
     recentCitations.filter((c) => c.cited).map((c) => c.platform)
   );
 
+  const [recheckLoading, setRecheckLoading] = useState(false);
+  const [recheckMessage, setRecheckMessage] = useState('');
+  const [recheckStatus, setRecheckStatus] = useState<'success' | 'error' | ''>('');
+
+  const [localCompetitors, setLocalCompetitors] = useState(competitors);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCompName, setNewCompName] = useState('');
+  const [newCompUrl, setNewCompUrl] = useState('');
+  const [addingComp, setAddingComp] = useState(false);
+  const [compError, setCompError] = useState('');
+
+  async function handleRecheck() {
+    setRecheckLoading(true);
+    setRecheckMessage('');
+    setRecheckStatus('');
+    try {
+      const res = await fetch('/api/dashboard/recheck', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setRecheckMessage(json.error || 'Failed to trigger re-run.');
+        setRecheckStatus('error');
+      } else {
+        setRecheckMessage('Report is being regenerated. Results will appear in a few minutes.');
+        setRecheckStatus('success');
+      }
+    } catch {
+      setRecheckMessage('Something went wrong.');
+      setRecheckStatus('error');
+    } finally {
+      setRecheckLoading(false);
+    }
+  }
+
+  async function handleAddCompetitor() {
+    if (!newCompName.trim()) return;
+    setAddingComp(true);
+    setCompError('');
+    try {
+      const res = await fetch('/api/dashboard/competitors', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          clientId: client.id,
+          competitorName: newCompName.trim(),
+          competitorUrl: newCompUrl.trim() || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setCompError(json.error || 'Failed to add competitor.');
+        return;
+      }
+      let domain: string | null = null;
+      if (json.data.competitorUrl) {
+        try {
+          domain = new URL(json.data.competitorUrl).hostname;
+        } catch {
+          domain = null;
+        }
+      }
+      setLocalCompetitors(prev => [...prev, {
+        name: json.data.competitorName,
+        domain,
+        citedCount: 0,
+        platforms: [],
+        id: json.data.id,
+        isAutoDetected: false,
+      }]);
+      setNewCompName('');
+      setNewCompUrl('');
+      setShowAddForm(false);
+    } catch {
+      setCompError('Something went wrong.');
+    } finally {
+      setAddingComp(false);
+    }
+  }
+
+  async function handleDeleteCompetitor(competitorId: string) {
+    setLocalCompetitors(prev => prev.filter(c => c.id !== competitorId));
+    try {
+      const res = await fetch(`/api/dashboard/competitors/${competitorId}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        setLocalCompetitors(competitors);
+      }
+    } catch {
+      setLocalCompetitors(competitors);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-4xl">
       <Link
         href="/dashboard"
         className="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4"
       >
-        &larr; All Businesses
+        <span aria-hidden="true">&larr;</span> All Businesses
       </Link>
 
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{client.businessName}</h1>
           <p className="mt-1 text-gray-500">
-            {client.city}{client.state ? `, ${client.state}` : ''} — {client.websiteUrl}
+            {client.city && <>{client.city}{client.state ? `, ${client.state}` : ''} &mdash; </>}{client.websiteUrl}
           </p>
         </div>
-        <ManageBillingButton clientId={client.id} />
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" size="sm" onClick={handleRecheck} isLoading={recheckLoading}>
+            Re-run Report
+          </Button>
+          <ManageBillingButton clientId={client.id} />
+        </div>
       </div>
+      {recheckMessage && (
+        <p className={`mt-2 text-xs ${recheckStatus === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+          {recheckMessage}
+        </p>
+      )}
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Visibility Score */}
@@ -435,36 +544,99 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
       )}
 
       {/* Competitors */}
-      {competitors.length > 0 && (
-        <Card className="mt-6" title="Competitor Visibility">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm" aria-label="Competitor visibility">
-              <thead>
-                <tr className="border-b border-gray-100 text-left text-gray-500">
-                  <th scope="col" className="pb-3 font-medium">Competitor</th>
-                  <th scope="col" className="pb-3 font-medium">Cited In</th>
-                  <th scope="col" className="pb-3 font-medium">Platforms</th>
+      <Card className="mt-6" title="Competitor Visibility">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm" aria-label="Competitor visibility">
+            <thead>
+              <tr className="border-b border-gray-100 text-left text-gray-500">
+                <th scope="col" className="pb-3 font-medium">Competitor</th>
+                <th scope="col" className="pb-3 font-medium">Cited In</th>
+                <th scope="col" className="pb-3 font-medium">Platforms</th>
+                <th scope="col" className="pb-3 font-medium w-10"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {localCompetitors.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="py-6 text-center text-sm text-gray-500">
+                    No competitors detected yet. Add yours below.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {competitors.map((comp) => (
-                  <tr key={comp.name}>
-                    <td className="py-3 pr-4 text-gray-900">{comp.name}</td>
-                    <td className="py-3 pr-4 text-gray-600">
-                      {comp.citedCount} {comp.citedCount === 1 ? 'query' : 'queries'}
-                    </td>
-                    <td className="py-3 text-gray-600">
-                      {comp.platforms
-                        .map((p) => PLATFORM_LABELS[p] ?? p)
-                        .join(', ') || '--'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      )}
+              )}
+              {localCompetitors.map((comp) => (
+                <tr key={comp.id || comp.name}>
+                  <td className="py-3 pr-4 text-gray-900">
+                    <span>{comp.name}</span>
+                    {comp.isAutoDetected !== false && (
+                      <span className="ml-2 text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">Auto</span>
+                    )}
+                  </td>
+                  <td className="py-3 pr-4 text-gray-600">
+                    {comp.citedCount} {comp.citedCount === 1 ? 'query' : 'queries'}
+                  </td>
+                  <td className="py-3 pr-4 text-gray-600">
+                    {comp.platforms.map(p => PLATFORM_LABELS[p] ?? p).join(', ') || '--'}
+                  </td>
+                  <td className="py-3">
+                    {comp.id && (
+                      <button
+                        onClick={() => handleDeleteCompetitor(comp.id!)}
+                        className="text-gray-400 hover:text-red-500 text-sm min-w-[44px] min-h-[44px] flex items-center justify-center"
+                        title="Remove competitor"
+                        aria-label={`Remove ${comp.name}`}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {showAddForm ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); handleAddCompetitor(); }}
+            className="mt-4 flex flex-col gap-2 border-t border-gray-100 pt-4"
+          >
+            <div className="flex gap-2">
+              <Input
+                label="Competitor name"
+                type="text"
+                placeholder="Competitor name"
+                value={newCompName}
+                onChange={(e) => setNewCompName(e.target.value)}
+                className="flex-1"
+              />
+              <Input
+                label="Website URL (optional)"
+                type="text"
+                placeholder="https://example.com"
+                value={newCompUrl}
+                onChange={(e) => setNewCompUrl(e.target.value)}
+                className="flex-1"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button type="submit" size="sm" isLoading={addingComp}>
+                Add
+              </Button>
+              <Button type="button" variant="secondary" size="sm" onClick={() => { setShowAddForm(false); setCompError(''); }}>
+                Cancel
+              </Button>
+            </div>
+            {compError && <p className="text-xs text-red-600">{compError}</p>}
+          </form>
+        ) : (
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="mt-3 text-sm text-indigo-600 hover:text-indigo-500"
+          >
+            + Add Competitor
+          </button>
+        )}
+      </Card>
 
       {/* Quick links */}
       <div className="mt-6 flex gap-4">
@@ -494,9 +666,12 @@ function FileInstructions({
   const schemaUrl = `${appUrl}/api/geo/schema/${clientId}`;
 
   const copyToClipboard = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(label);
-    setTimeout(() => setCopied(null), 2000);
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    }).catch(() => {
+      // Silently fail - clipboard API may not be available
+    });
   };
 
   return (

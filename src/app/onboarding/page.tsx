@@ -22,6 +22,13 @@ function OnboardingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState(searchParams.get('url') || '');
+  const [businessName, setBusinessName] = useState('');
+  const [category, setCategory] = useState('');
+  const [serviceArea, setServiceArea] = useState('');
+  const [city, setCity] = useState('');
+  const [state, setState] = useState('');
+  const [competitors, setCompetitors] = useState('');
+  const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -54,7 +61,15 @@ function OnboardingContent() {
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({
+          url,
+          businessName: businessName || undefined,
+          category: category || undefined,
+          serviceArea: serviceArea || undefined,
+          city: city || undefined,
+          state: state || undefined,
+          competitors: competitors ? competitors.split('\n').map(s => s.trim()).filter(Boolean).slice(0, 5) : undefined,
+        }),
       });
 
       const data = await res.json();
@@ -126,6 +141,111 @@ function OnboardingContent() {
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={isLoading}
               />
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setShowDetails(!showDetails)}
+                  className="flex items-center gap-1 text-sm text-indigo-600 hover:text-indigo-500 font-medium"
+                >
+                  <svg
+                    className={`h-4 w-4 transition-transform ${showDetails ? 'rotate-90' : ''}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    aria-hidden="true"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                  Help us get it right (optional)
+                </button>
+
+                {showDetails && (
+                  <div className="mt-3 space-y-3 rounded-md border border-gray-100 bg-gray-50 p-4">
+                    <Input
+                      label="Business name"
+                      type="text"
+                      placeholder="Your business name"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      disabled={isLoading}
+                    />
+
+                    <Input
+                      label="What does your business do?"
+                      type="text"
+                      placeholder="e.g. clothing store, dental practice, plumbing contractor"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      disabled={isLoading}
+                    />
+
+                    <fieldset className="border-0 p-0 m-0">
+                      <legend className="block text-sm font-medium text-gray-700 mb-1">
+                        Service area
+                      </legend>
+                      <div className="flex gap-4">
+                        {(['local', 'regional', 'national', 'global'] as const).map((option) => (
+                          <label key={option} className="flex items-center gap-1.5 text-sm text-gray-700">
+                            <input
+                              type="radio"
+                              name="serviceArea"
+                              value={option}
+                              checked={serviceArea === option}
+                              onChange={(e) => setServiceArea(e.target.value)}
+                              disabled={isLoading}
+                              className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                            />
+                            {option.charAt(0).toUpperCase() + option.slice(1)}
+                          </label>
+                        ))}
+                      </div>
+                    </fieldset>
+
+                    {serviceArea === 'local' && (
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <Input
+                            label="City"
+                            type="text"
+                            placeholder="City"
+                            value={city}
+                            onChange={(e) => setCity(e.target.value)}
+                            disabled={isLoading}
+                          />
+                        </div>
+                        <div className="w-24">
+                          <Input
+                            label="State"
+                            type="text"
+                            placeholder="State"
+                            value={state}
+                            onChange={(e) => setState(e.target.value)}
+                            disabled={isLoading}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label htmlFor="competitors" className="block text-sm font-medium text-gray-700 mb-1">
+                        Competitors
+                      </label>
+                      <textarea
+                        id="competitors"
+                        placeholder="One per line (name or URL)"
+                        rows={3}
+                        value={competitors}
+                        onChange={(e) => setCompetitors(e.target.value)}
+                        disabled={isLoading}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-gray-100"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Up to 5 competitors</p>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {error && <p className="text-sm text-red-600">{error}</p>}
 

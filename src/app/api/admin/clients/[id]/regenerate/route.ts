@@ -76,7 +76,7 @@ export async function POST(
       {
         businessName: updatedClient.businessName,
         category: updatedClient.category ?? undefined,
-        city: updatedClient.city,
+        city: updatedClient.city ?? undefined,
         state: updatedClient.state ?? undefined,
         phone: updatedClient.phone ?? undefined,
         address: updatedClient.address ?? undefined,
@@ -94,7 +94,7 @@ export async function POST(
     const schemaScript = generateSchemaScript({
       businessName: updatedClient.businessName,
       address: updatedClient.address ?? undefined,
-      city: updatedClient.city,
+      city: updatedClient.city ?? "",
       state: updatedClient.state ?? undefined,
       phone: updatedClient.phone ?? undefined,
       websiteUrl: updatedClient.websiteUrl,

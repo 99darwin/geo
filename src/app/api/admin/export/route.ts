@@ -41,7 +41,7 @@ export async function GET(
     c.id,
     escapeCsv(c.businessName),
     escapeCsv(c.websiteUrl),
-    escapeCsv(c.city),
+    c.city ? escapeCsv(c.city) : "",
     c.state ? escapeCsv(c.state) : "",
     c.plan,
     c.onboardingStatus,
