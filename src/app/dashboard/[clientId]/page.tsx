@@ -35,6 +35,7 @@ interface DashboardData {
     city: string | null;
     state: string | null;
     category: string | null;
+    serviceArea: string | null;
     plan: string;
     onboardingStatus: string;
   };
@@ -229,7 +230,9 @@ function FreeScanState({ clientId, websiteUrl, data }: { clientId: string; websi
 }
 
 function ActiveDashboard({ data }: { data: DashboardData }) {
-  const { client, visibilityScore, recentCitations, generatedFiles, scoreHistory, recommendations, competitors } = data;
+  const { visibilityScore, recentCitations, generatedFiles, scoreHistory, recommendations, competitors } = data;
+  const [localClient, setLocalClient] = useState(data.client);
+  const client = localClient;
   const citedPlatforms = new Set(
     recentCitations.filter((c) => c.cited).map((c) => c.platform)
   );
@@ -237,6 +240,77 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
   const [recheckLoading, setRecheckLoading] = useState(false);
   const [recheckMessage, setRecheckMessage] = useState('');
   const [recheckStatus, setRecheckStatus] = useState<'success' | 'error' | ''>('');
+
+  const [profileEditing, setProfileEditing] = useState(false);
+  const [profileData, setProfileData] = useState({
+    businessName: client.businessName,
+    category: client.category ?? '',
+    serviceArea: client.serviceArea ?? '',
+    city: client.city ?? '',
+    state: client.state ?? '',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState('');
+
+  function handleProfileCancel() {
+    setProfileData({
+      businessName: client.businessName,
+      category: client.category ?? '',
+      serviceArea: client.serviceArea ?? '',
+      city: client.city ?? '',
+      state: client.state ?? '',
+    });
+    setProfileError('');
+    setProfileEditing(false);
+  }
+
+  async function handleProfileSave() {
+    if (!profileData.businessName.trim()) {
+      setProfileError('Business name is required.');
+      return;
+    }
+    setProfileSaving(true);
+    setProfileError('');
+
+    const changed: Record<string, string | null> = {};
+    if (profileData.businessName !== client.businessName) changed.businessName = profileData.businessName;
+    if (profileData.category !== (client.category ?? '')) changed.category = profileData.category || null;
+    if (profileData.serviceArea !== (client.serviceArea ?? '')) changed.serviceArea = profileData.serviceArea || null;
+    if (profileData.city !== (client.city ?? '')) changed.city = profileData.city || null;
+    if (profileData.state !== (client.state ?? '')) changed.state = profileData.state || null;
+
+    if (Object.keys(changed).length === 0) {
+      setProfileEditing(false);
+      setProfileSaving(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/dashboard/client', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId: client.id, ...changed }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setProfileError(json.error || 'Failed to save profile.');
+        return;
+      }
+      setLocalClient((prev) => ({
+        ...prev,
+        businessName: profileData.businessName,
+        category: profileData.category || null,
+        serviceArea: profileData.serviceArea || null,
+        city: profileData.city || null,
+        state: profileData.state || null,
+      }));
+      setProfileEditing(false);
+    } catch {
+      setProfileError('Something went wrong.');
+    } finally {
+      setProfileSaving(false);
+    }
+  }
 
   const [localCompetitors, setLocalCompetitors] = useState(competitors);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -358,6 +432,113 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
           {recheckMessage}
         </p>
       )}
+
+      {/* Business Profile */}
+      <Card className="mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-gray-900">Business Profile</h3>
+          {!profileEditing && (
+            <Button variant="secondary" size="sm" onClick={() => setProfileEditing(true)}>
+              Edit
+            </Button>
+          )}
+        </div>
+
+        {profileEditing ? (
+          <div className="space-y-4">
+            <Input
+              label="Business Name"
+              type="text"
+              value={profileData.businessName}
+              onChange={(e) => setProfileData((prev) => ({ ...prev, businessName: e.target.value }))}
+              required
+            />
+            <Input
+              label="Category"
+              type="text"
+              placeholder="e.g. clothing store, dental practice"
+              value={profileData.category}
+              onChange={(e) => setProfileData((prev) => ({ ...prev, category: e.target.value }))}
+            />
+            <fieldset className="border-0 p-0 m-0">
+              <legend className="block text-sm font-medium text-gray-700 mb-1">
+                Service area
+              </legend>
+              <div className="flex flex-wrap gap-4">
+                {(['local', 'regional', 'national', 'global'] as const).map((option) => (
+                  <label key={option} className="flex items-center gap-1.5 text-sm text-gray-700">
+                    <input
+                      type="radio"
+                      name="profileServiceArea"
+                      value={option}
+                      checked={profileData.serviceArea === option}
+                      onChange={(e) => setProfileData((prev) => ({ ...prev, serviceArea: e.target.value }))}
+                      className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                    />
+                    {option.charAt(0).toUpperCase() + option.slice(1)}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            {(profileData.serviceArea === 'local' || profileData.serviceArea === 'regional') && (
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <Input
+                    label="City"
+                    type="text"
+                    value={profileData.city}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, city: e.target.value }))}
+                  />
+                </div>
+                <div className="flex-1">
+                  <Input
+                    label="State"
+                    type="text"
+                    value={profileData.state}
+                    onChange={(e) => setProfileData((prev) => ({ ...prev, state: e.target.value }))}
+                  />
+                </div>
+              </div>
+            )}
+            {profileError && <p className="text-xs text-red-600">{profileError}</p>}
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleProfileSave} isLoading={profileSaving}>
+                Save
+              </Button>
+              <Button variant="secondary" size="sm" onClick={handleProfileCancel}>
+                Cancel
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            <div>
+              <p className="text-gray-500">Business Name</p>
+              <p className="font-medium text-gray-900">{client.businessName}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Category</p>
+              <p className="font-medium text-gray-900">{client.category || '--'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">Service Area</p>
+              <p className="font-medium text-gray-900">
+                {client.serviceArea
+                  ? client.serviceArea.charAt(0).toUpperCase() + client.serviceArea.slice(1)
+                  : '--'}
+              </p>
+            </div>
+            <div>
+              <p className="text-gray-500">City</p>
+              <p className="font-medium text-gray-900">{client.city || '--'}</p>
+            </div>
+            <div>
+              <p className="text-gray-500">State</p>
+              <p className="font-medium text-gray-900">{client.state || '--'}</p>
+            </div>
+          </div>
+        )}
+      </Card>
 
       <div className="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {/* Visibility Score */}

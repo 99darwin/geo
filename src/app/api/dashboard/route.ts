@@ -16,6 +16,7 @@ interface DashboardData {
     category: string | null;
     plan: string;
     onboardingStatus: string;
+    serviceArea: string | null;
   };
   visibilityScore: {
     score: number;
@@ -180,6 +181,7 @@ export async function GET(
         category: client.category,
         plan: client.plan,
         onboardingStatus: client.onboardingStatus,
+        serviceArea: client.serviceArea ?? null,
       },
       visibilityScore: latestScore
         ? {
