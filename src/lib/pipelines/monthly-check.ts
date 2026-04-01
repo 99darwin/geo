@@ -148,6 +148,8 @@ export async function runMonthlyCheck(clientId: string, options?: { force?: bool
   // Update client — only fill in fields that are currently empty/junk.
   // Never overwrite user-edited values (profile editor sets real names/categories).
   const isUrlLikeName = (name: string) => /^https?:\/\/|\.com|\.org|\.net/i.test(name);
+  const PLACEHOLDERS = new Set(["unknown", "n/a", "none", "null", "undefined", ""]);
+  const isPlaceholder = (val: string | null | undefined) => !val || PLACEHOLDERS.has(val.trim().toLowerCase());
   const updateData: Record<string, unknown> = {};
 
   // Only update businessName if current value looks like a URL/domain
@@ -158,9 +160,16 @@ export async function runMonthlyCheck(clientId: string, options?: { force?: bool
         : enriched?.businessName ?? client.businessName;
   }
 
-  // Only backfill nullable fields if currently empty
-  if (!client.city) updateData.city = crawlResult.city || enriched?.city || null;
-  if (!client.state) updateData.state = crawlResult.state || enriched?.state || null;
+  // Clear city/state for national/global businesses
+  const effectiveServiceArea = client.serviceArea || enriched?.serviceArea;
+  if (effectiveServiceArea === "national" || effectiveServiceArea === "global") {
+    if (client.city) updateData.city = null;
+    if (client.state) updateData.state = null;
+  } else {
+    // Only backfill nullable fields if currently empty or placeholder
+    if (isPlaceholder(client.city)) updateData.city = crawlResult.city || enriched?.city || null;
+    if (isPlaceholder(client.state)) updateData.state = crawlResult.state || enriched?.state || null;
+  }
   if (!client.phone) updateData.phone = crawlResult.phone || null;
   if (!client.address) updateData.address = crawlResult.address || null;
   if (!client.category) updateData.category = crawlResult.category || enriched?.category || null;

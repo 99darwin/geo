@@ -472,7 +472,14 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
                       name="profileServiceArea"
                       value={option}
                       checked={profileData.serviceArea === option}
-                      onChange={(e) => setProfileData((prev) => ({ ...prev, serviceArea: e.target.value }))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setProfileData((prev) => ({
+                          ...prev,
+                          serviceArea: val,
+                          ...(val === 'national' || val === 'global' ? { city: '', state: '' } : {}),
+                        }));
+                      }}
                       className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
                     />
                     {option.charAt(0).toUpperCase() + option.slice(1)}
