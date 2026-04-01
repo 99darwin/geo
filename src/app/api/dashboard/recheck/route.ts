@@ -91,7 +91,7 @@ export async function POST(
   }
 
   // Run in background — don't block the response
-  const promise = runMonthlyCheck(clientId).catch((err) => {
+  const promise = runMonthlyCheck(clientId, { force: true }).catch((err) => {
     console.error(`[Dashboard Recheck] Failed for ${clientId}:`, err);
   });
 
