@@ -56,9 +56,11 @@ async function crawlWithFirecrawl(
 function parseFirecrawlResponse(content: string, sourceUrl: string): CrawlResult {
   const lines = content.split("\n");
 
-  // Extract business name from first heading
+  // Extract business name from first heading (skip URL-like titles — often from llms.txt files)
   const titleLine = lines.find((l) => l.startsWith("# "));
-  const businessName = titleLine?.replace(/^#\s+/, "").trim() || extractDomainName(sourceUrl);
+  const rawTitle = titleLine?.replace(/^#\s+/, "").trim();
+  const isUrlLikeTitle = rawTitle && /^https?:\/\/|^www\./i.test(rawTitle);
+  const businessName = (rawTitle && !isUrlLikeTitle) ? rawTitle : extractDomainName(sourceUrl);
 
   // Extract description from blockquote
   const descLine = lines.find((l) => l.startsWith("> "));

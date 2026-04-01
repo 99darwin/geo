@@ -118,13 +118,21 @@ async function executeSetupSteps(clientId: string): Promise<void> {
   }
 
   // Step 3: Update client with crawled data (priority: user-provided > crawl > enriched > existing)
-  // Business name: if it looks like a domain (no spaces), prefer crawl/enriched over it
-  const isLikelyDomainName = !client.businessName.includes(" ");
+  // Business name: replace if current value looks like a URL/domain (not a real name)
+  const isUrlLikeName = (name: string) => /^https?:\/\/|^www\.|\.com\b|\.org\b|\.net\b/i.test(name);
+  const needsNameReplacement = isUrlLikeName(client.businessName);
+  const bestCrawlName = crawlResult.businessName && !isUrlLikeName(crawlResult.businessName)
+    ? crawlResult.businessName
+    : null;
+  const bestEnrichedName = enrichedData.businessName && !isUrlLikeName(enrichedData.businessName)
+    ? enrichedData.businessName
+    : null;
+
   await prisma.client.update({
     where: { id: clientId },
     data: {
-      businessName: isLikelyDomainName
-        ? (crawlResult.businessName || enrichedData.businessName || client.businessName)
+      businessName: needsNameReplacement
+        ? (bestCrawlName || bestEnrichedName || client.businessName)
         : client.businessName,
       city: client.city || crawlResult.city || enrichedData.city || null,
       state: client.state || crawlResult.state || enrichedData.state || null,
