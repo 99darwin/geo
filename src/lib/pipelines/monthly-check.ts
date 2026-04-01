@@ -56,7 +56,7 @@ async function acquireLock(key: string): Promise<(() => Promise<void>) | null> {
  * exists for this clientId + current month, returns early with existing data.
  * Does NOT delete old citations — all records are historical/append-only.
  */
-export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckResult> {
+export async function runMonthlyCheck(clientId: string, options?: { force?: boolean }): Promise<MonthlyCheckResult> {
   console.log("[Monthly Check] Starting for client:", clientId);
 
   // Step 1: Load client and validate eligibility
@@ -95,27 +95,30 @@ export async function runMonthlyCheck(clientId: string): Promise<MonthlyCheckRes
 
   try {
 
-  const existingScore = await prisma.visibilityScore.findUnique({
-    where: { clientId_period: { clientId, period } },
-  });
-
-  if (existingScore) {
-    console.log("[Monthly Check] Already ran for this period, returning existing score");
-
-    // Find previous period score for delta
-    const previousScore = await prisma.visibilityScore.findFirst({
-      where: { clientId, period: { lt: period } },
-      orderBy: { period: "desc" },
+  if (!options?.force) {
+    const existingScore = await prisma.visibilityScore.findUnique({
+      where: { clientId_period: { clientId, period } },
     });
 
-    return {
-      clientId,
-      newScore: existingScore.score,
-      previousScore: previousScore?.score ?? null,
-      delta: existingScore.score - (previousScore?.score ?? existingScore.score),
-      filesRegenerated: false,
-      citationsChecked: 0,
-    };
+    if (existingScore) {
+      console.log("[Monthly Check] Already ran for this period, returning existing score");
+
+      const previousScore = await prisma.visibilityScore.findFirst({
+        where: { clientId, period: { lt: period } },
+        orderBy: { period: "desc" },
+      });
+
+      return {
+        clientId,
+        newScore: existingScore.score,
+        previousScore: previousScore?.score ?? null,
+        delta: existingScore.score - (previousScore?.score ?? existingScore.score),
+        filesRegenerated: false,
+        citationsChecked: 0,
+      };
+    }
+  } else {
+    console.log("[Monthly Check] Force mode — skipping idempotency check");
   }
 
   // SSRF validation

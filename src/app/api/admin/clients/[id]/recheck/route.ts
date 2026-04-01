@@ -36,7 +36,7 @@ export async function POST(
   });
 
   // Run in background — don't block the response
-  const promise = runMonthlyCheck(id).catch((err) => {
+  const promise = runMonthlyCheck(id, { force: true }).catch((err) => {
     console.error(`[Admin Recheck] Failed for ${id}:`, err);
   });
 
