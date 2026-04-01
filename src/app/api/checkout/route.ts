@@ -9,7 +9,7 @@ const checkoutSchema = z.object({
   url: z.string().url("Please enter a valid URL"),
   businessName: z.string().max(200).optional(),
   category: z.string().max(200).optional(),
-  serviceArea: z.enum(["local", "national", "global"]).optional(),
+  serviceArea: z.enum(["local", "regional", "national", "global"]).optional(),
   city: z.string().max(100).optional(),
   state: z.string().max(50).optional(),
   competitors: z.array(z.string().max(200)).max(5).optional(),

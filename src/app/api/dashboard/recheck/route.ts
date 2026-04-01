@@ -71,8 +71,11 @@ export async function POST(
           )
         )
       : 0;
+    const message = waitSec > 0
+      ? `Please wait ${waitSec}s before triggering again.`
+      : "Report already queued. Please wait a few minutes.";
     return NextResponse.json(
-      { error: `Please wait ${waitSec}s before triggering again.` },
+      { error: message },
       { status: 429 }
     );
   }

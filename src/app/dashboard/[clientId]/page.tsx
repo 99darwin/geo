@@ -748,7 +748,7 @@ function ActiveDashboard({ data }: { data: DashboardData }) {
                 <tr key={comp.id || comp.name}>
                   <td className="py-3 pr-4 text-gray-900">
                     <span>{comp.name}</span>
-                    {comp.isAutoDetected !== false && (
+                    {comp.isAutoDetected === true && (
                       <span className="ml-2 text-xs text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">Auto</span>
                     )}
                   </td>
