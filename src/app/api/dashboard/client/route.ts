@@ -39,6 +39,12 @@ export async function PATCH(
   if (updates.city !== undefined) data.city = updates.city;
   if (updates.state !== undefined) data.state = updates.state;
 
+  // When service area is national/global, clear city/state
+  if (data.serviceArea === "national" || data.serviceArea === "global") {
+    data.city = null;
+    data.state = null;
+  }
+
   if (Object.keys(data).length === 0) {
     return NextResponse.json(
       { error: "No fields to update" },

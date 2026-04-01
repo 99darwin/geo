@@ -4,10 +4,15 @@ import { sanitizeForPrompt } from "@/lib/utils/sanitize";
 const ENRICHED_ABOUT_TIMEOUT_MS = 10_000;
 
 /**
- * Return trimmed string if non-empty, otherwise undefined.
+ * Return trimmed string if non-empty and not a placeholder, otherwise undefined.
  */
+const PLACEHOLDER_VALUES = new Set(["unknown", "n/a", "none", "null", "undefined", ""]);
+
 function truthy(val: string | undefined): string | undefined {
-  return val && val.trim() ? val.trim() : undefined;
+  if (!val) return undefined;
+  const trimmed = val.trim();
+  if (PLACEHOLDER_VALUES.has(trimmed.toLowerCase())) return undefined;
+  return trimmed;
 }
 
 /**
