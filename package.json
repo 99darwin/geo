@@ -8,6 +8,7 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "security:scan": "tsx scripts/security-scan/scan.ts",
     "test:security": "tsx --test scripts/security-scan/rules/__tests__/*.test.ts"
   },
